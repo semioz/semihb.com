@@ -1,0 +1,7 @@
+baseURL = 'https://semihb.com/'
+languageCode = 'en-us'
+title = 'semih berkay öztürk'
+theme = 'archie'
+[params]
+	mode="dark"
+	useCDN=false
