@@ -6,21 +6,21 @@
     <description>Recent content on semih berkay öztürk</description>
     <generator>Hugo</generator>
     <language>en-us</language>
-    <lastBuildDate>Wed, 01 Apr 2020 02:01:58 +0530</lastBuildDate>
+    <lastBuildDate>Sun, 22 Jun 2025 00:00:00 +0000</lastBuildDate>
     <atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>Primer: When You Have Too Much to Do</title>
-      <link>http://localhost:1313/essays/first/</link>
-      <pubDate>Wed, 01 Apr 2020 02:01:58 +0530</pubDate>
-      <guid>http://localhost:1313/essays/first/</guid>
-      <description>&lt;p&gt;skdcmsd&lt;/p&gt;</description>
+      <title>About</title>
+      <link>http://localhost:1313/about/</link>
+      <pubDate>Sun, 22 Jun 2025 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/about/</guid>
+      <description>&lt;p&gt;I&amp;rsquo;m a backend developer interested in scalable systems, machine learning, and startups. I study Computer Science and like building things that are fast, reliable, and actually used.&lt;/p&gt;&#xA;&lt;p&gt;You can find what I’m working on here.&lt;/p&gt;</description>
     </item>
     <item>
-      <title></title>
-      <link>http://localhost:1313/about/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      <guid>http://localhost:1313/about/</guid>
-      <description>&lt;p&gt;sdipcnsipdjc&lt;/p&gt;</description>
+      <title>Escape competition</title>
+      <link>http://localhost:1313/essays/first/</link>
+      <pubDate>Sun, 01 Jun 2025 02:01:58 +0530</pubDate>
+      <guid>http://localhost:1313/essays/first/</guid>
+      <description></description>
     </item>
   </channel>
 </rss>

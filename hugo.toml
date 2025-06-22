@@ -5,6 +5,7 @@ theme = 'archie'
 [params]
 	mode="dark"
 	useCDN=false
+	subtitle="Some cached thoughts on technology, startups, and more."
 	
 [[menu.main]]
 name = "Home"
