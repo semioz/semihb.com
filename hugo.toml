@@ -5,3 +5,33 @@ theme = 'archie'
 [params]
 	mode="dark"
 	useCDN=false
+	
+[[menu.main]]
+name = "Home"
+url = "/"
+weight = 1
+
+[[menu.main]]
+name = "Essays"
+url = "/essays"
+weight = 2
+
+[[menu.main]]
+name = "About"
+url = "/about"
+weight = 3
+
+[[params.social]]
+name = "GitHub"
+icon = "github"
+url = "https://github.com/semioz/"
+
+[[params.social]]
+name = "LinkedIn"
+icon = "linkedin"
+url = "https://www.linkedin.com/in/semioz/"
+
+[[params.social]]
+name = "X"
+icon = "x"
+url = "https://x.com/semiozz"

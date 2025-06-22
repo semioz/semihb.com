@@ -2,13 +2,19 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>http://localhost:1313/posts/</loc>
+    <loc>http://localhost:1313/about/</loc>
+    <lastmod>2020-04-01T02:01:58+05:30</lastmod>
+  </url><url>
+    <loc>http://localhost:1313/tags/about/</loc>
+    <lastmod>2020-04-01T02:01:58+05:30</lastmod>
+  </url><url>
+    <loc>http://localhost:1313/essays/</loc>
     <lastmod>2020-04-01T02:01:58+05:30</lastmod>
   </url><url>
     <loc>http://localhost:1313/tags/primer/</loc>
     <lastmod>2020-04-01T02:01:58+05:30</lastmod>
   </url><url>
-    <loc>http://localhost:1313/posts/first/</loc>
+    <loc>http://localhost:1313/essays/first/</loc>
     <lastmod>2020-04-01T02:01:58+05:30</lastmod>
   </url><url>
     <loc>http://localhost:1313/</loc>
