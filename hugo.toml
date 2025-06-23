@@ -36,3 +36,7 @@ url = "https://www.linkedin.com/in/semioz/"
 name = "X"
 icon = "x"
 url = "https://x.com/semiozz"
+
+[caches]
+  [caches.images]
+    dir = ':cacheDir/images'
