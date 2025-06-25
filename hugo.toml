@@ -1,3 +1,4 @@
+# Hugo configuration file
 baseURL = 'https://semihb.com/'
 languageCode = 'en-us'
 title = 'semih berkay öztürk'
