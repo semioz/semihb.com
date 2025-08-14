@@ -3,17 +3,17 @@ title = "Bookmarks"
 date = "2025-08-13"
 +++
 
-a curated collection of useful links, papers, and resources that I find valuable and want to reference again.
+a curated collection of useful links, papers, and resources that i find valuable and want to reference again.
 
-## Machine Learning
+## machine Learning
 
-## Rust
+## rust
 
-## Computer Science
+## computer science
 
-## Distributed Systems
+## distributed systems
 
-## Database
+## databases
 
 ---
 

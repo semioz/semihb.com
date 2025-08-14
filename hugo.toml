@@ -6,8 +6,8 @@ theme = 'archie'
 [params]
 	mode="dark"
 	useCDN=false
-	subtitle="some cached thoughts on technology, startups, and more."
-	
+	subtitle="some cached thoughts on my explorations"
+
 [[menu.main]]
 name = "home"
 url = "/"
