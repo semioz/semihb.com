@@ -2,21 +2,21 @@
 <html><head lang="en"><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
 	<meta charset="utf-8" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>speeding up diffusion models with first block caching - semih berkay öztürk</title><meta name="viewport" content="width=device-width, initial-scale=1">
-	<meta name="description" content="How to speed up diffusion inference by 20-40% with minimal quality loss using first block caching" />
+	<meta name="description" content="how to speed up diffusion inference with minimal quality loss using first block caching" />
 	<meta property="og:image" content=""/>
-	<meta property="og:url" content="http://localhost:1313/essays/first/">
+	<meta property="og:url" content="http://localhost:1313/essays/first-block-caching/">
   <meta property="og:site_name" content="semih berkay öztürk">
   <meta property="og:title" content="speeding up diffusion models with first block caching">
-  <meta property="og:description" content="How to speed up diffusion inference by 20-40% with minimal quality loss using first block caching">
+  <meta property="og:description" content="how to speed up diffusion inference with minimal quality loss using first block caching">
   <meta property="og:locale" content="en_us">
   <meta property="og:type" content="article">
     <meta property="article:section" content="essays">
-    <meta property="article:published_time" content="2025-06-01T02:01:58+05:30">
-    <meta property="article:modified_time" content="2025-06-01T02:01:58+05:30">
+    <meta property="article:published_time" content="2025-08-13T02:01:58+05:30">
+    <meta property="article:modified_time" content="2025-08-13T02:01:58+05:30">
 
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="speeding up diffusion models with first block caching">
-  <meta name="twitter:description" content="How to speed up diffusion inference by 20-40% with minimal quality loss using first block caching">
+  <meta name="twitter:description" content="how to speed up diffusion inference with minimal quality loss using first block caching">
 
         <link href="http://localhost:1313/css/fonts.b4e80957a67274387d495fb9178a84dfc3401f32c3256dec20131802a21ef7c1.css" rel="stylesheet">
 	
@@ -32,13 +32,13 @@
 	</div>
 	<nav>
 		
-		<a href="/">Home</a>
+		<a href="/">home</a>
 		
-		<a href="/essays">Essays</a>
+		<a href="/essays">writings</a>
 		
-		<a href="/about">About</a>
+		<a href="/bookmarks">bookmarks</a>
 		
-		<a href="/bookmarks">Bookmarks</a>
+		<a href="/about">about</a>
 		
 		
 	</nav>
@@ -51,7 +51,7 @@
       <div class="post-content">
         <div class="title">
           <h1 class="title">speeding up diffusion models with first block caching</h1>
-          <div class="meta">Posted on Jun 1, 2025</div>
+          <div class="meta">Posted on Aug 13, 2025</div>
         </div>
         
         <section class="body">
@@ -69,81 +69,9 @@
 <li><strong>make a decision</strong> - if the change is below a threshold, skip the remaining blocks and reuse cached results</li>
 </ol>
 <p>some visual representation of the process:</p>
-<pre tabindex="0"><code>Timestep T:
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ First Block │ -&gt; │ Second Block│ -&gt; │ Third Block │ -&gt; Output
-└─────────────┘    └─────────────┘    └─────────────┘
-       │
-       v
-   Compare with
-   previous output
-       │
-       v
-   Change &lt; threshold?
-       │
-   ┌───┴────┐
-   │  Yes   │  No
-   │        │
-   │ Skip   │ Continue
-   │ rest   │ computation
-   └────────┘
-</code></pre><h3 id="what-happens-across-multiple-timesteps">what happens across multiple timesteps</h3>
-<p>let&rsquo;s break down what happens across multiple timesteps in a diffusion process:</p>
-<pre tabindex="0"><code>diffusion Denoising Timeline:
-Time → t=1000   t=950   t=900   t=850   t=800   ...   t=50   t=0
-
-Timestep t=1000 (Early denoising - large changes expected):
-┌─────────────┐
-│ First Block │ ← Input: Very noisy image
-│   Output A  │
-└─────────────┘
-       │ (No previous output to compare)
-       v
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Block 2     │ -&gt; │ Block 3     │ -&gt; │ Block N     │ -&gt; Final Output A
-│ ✓ Execute   │    │ ✓ Execute   │    │ ✓ Execute   │    (Cache this)
-└─────────────┘    └─────────────┘    └─────────────┘
-
-Timestep t=950:
-┌─────────────┐
-│ First Block │ ← Input: Slightly less noisy
-│   Output B  │
-└─────────────┘
-       │
-       v Compare: ||Output B - Output A|| / ||Output A|| = 0.18
-       v (0.18 &gt; 0.12 threshold → Continue)
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Block 2     │ -&gt; │ Block 3     │ -&gt; │ Block N     │ -&gt; Final Output B
-│ ✓ Execute   │    │ ✓ Execute   │    │ ✓ Execute   │    (Cache this)
-└─────────────┘    └─────────────┘    └─────────────┘
-
-Timestep t=900:
-┌─────────────┐
-│ First Block │ ← Input: More refined
-│   Output C  │
-└─────────────┘
-       │
-       v Compare: ||Output C - Output B|| / ||Output B|| = 0.09
-       v (0.09 &lt; 0.12 threshold → Skip!)
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Block 2     │ -&gt; │ Block 3     │ -&gt; │ Block N     │ -&gt; Return cached
-│   ✗ Skip    │    │   ✗ Skip    │    │   ✗ Skip    │    Output B
-└─────────────┘    └─────────────┘    └─────────────┘
-
-Timestep t=850:
-┌─────────────┐
-│ First Block │ ← Input: Further refined
-│   Output D  │
-└─────────────┘
-       │
-       v Compare: ||Output D - Output C|| / ||Output C|| = 0.08
-       v (0.08 &lt; 0.12 threshold → Skip again!)
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Block 2     │ -&gt; │ Block 3     │ -&gt; │ Block N     │ -&gt; Return cached
-│   ✗ Skip    │    │   ✗ Skip    │    │   ✗ Skip    │    Output B
-└─────────────┘    └─────────────┘    └─────────────┘
-</code></pre><h3 id="memory-and-computation">memory and computation</h3>
-<p>here&rsquo;s how the caching affects memory and computation over time:</p>
+<p><img src="/first.png" alt="first"></p>
+<h3 id="memory-and-computation">memory and computation</h3>
+<p>how this caching may affect memory and computation over time hypothetically:</p>
 <pre tabindex="0"><code>Memory Usage Pattern:
 ┌─────────────────────────────────────────────────────┐
 │ GPU Memory                                          │
@@ -152,7 +80,7 @@ Timestep t=850:
 │ ▒▒▒ Final Output Cache (medium)                     │
 │                                                     │
 │ Normal Forward Pass:                                │
-│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ Full computation                     │
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ Full computation                    │
 │                                                     │
 │ Cached Forward Pass:                                │
 │ ▓▓▓░░ First block + cache lookup                    │
@@ -161,10 +89,10 @@ Timestep t=850:
 
 Computation Time Comparison:
 ┌─────────────────────────────────────────────────────┐
-│ Timesteps: 1  2  3  4  5  6  7  8  9  10 11 12     │
+│ Timesteps: 1  2  3  4  5  6  7  8  9  10 11 12      │
 │                                                     │
 │ Without Caching:                                    │
-│ ████ ████ ████ ████ ████ ████ ████ ████ ████ ████  │
+│ ████ ████ ████ ████ ████ ████ ████ ████ ████ ████   │
 │                                                     │
 │ With Caching (42% hit rate):                        │
 │ ████ ████ █ ████ █ █ ████ █ ████ █ ████ █           │
@@ -172,7 +100,7 @@ Computation Time Comparison:
 │ Legend: ████ = Full computation                     │
 │         █    = Cached computation                   │
 └─────────────────────────────────────────────────────┘
-</code></pre><h2 id="implementation-with-pytorch">implementation with pytorch</h2>
+</code></pre><h2 id="minimal-implementation-with-pytorch">minimal implementation with pytorch</h2>
 <p>first, we&rsquo;ll create a basic caching mechanism with pure pytorch:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> torch
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> torch.nn <span style="color:#66d9ef">as</span> nn
@@ -187,12 +115,12 @@ Computation Time Comparison:
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>total_calls <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">should_skip_computation</span>(self, current_output: torch<span style="color:#f92672">.</span>Tensor) <span style="color:#f92672">-&gt;</span> bool:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;Determine if we should skip the rest of the forward pass.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;deciding if we should skip the rest of the forward pass.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>previous_first_block_output <span style="color:#f92672">is</span> <span style="color:#66d9ef">None</span>:
 </span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>previous_first_block_output <span style="color:#f92672">=</span> current_output<span style="color:#f92672">.</span>clone()
 </span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Calculate the relative change between current and previous outputs</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># relative change between current and previous outputs</span>
 </span></span><span style="display:flex;"><span>        diff <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>norm(current_output <span style="color:#f92672">-</span> self<span style="color:#f92672">.</span>previous_first_block_output)
 </span></span><span style="display:flex;"><span>        relative_diff <span style="color:#f92672">=</span> diff <span style="color:#f92672">/</span> (torch<span style="color:#f92672">.</span>norm(self<span style="color:#f92672">.</span>previous_first_block_output) <span style="color:#f92672">+</span> <span style="color:#ae81ff">1e-8</span>)
 </span></span><span style="display:flex;"><span>        
@@ -205,73 +133,65 @@ Computation Time Comparison:
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">update_cache</span>(self, output: torch<span style="color:#f92672">.</span>Tensor):
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;Update the cached final output.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cached_final_output <span style="color:#f92672">=</span> output<span style="color:#f92672">.</span>clone()
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_cached_output</span>(self) <span style="color:#f92672">-&gt;</span> torch<span style="color:#f92672">.</span>Tensor:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;Return the cached output.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>cached_final_output <span style="color:#f92672">is</span> <span style="color:#66d9ef">None</span>:
 </span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;No cached output available&#34;</span>)
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>cached_final_output
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_cache_stats</span>(self) <span style="color:#f92672">-&gt;</span> Dict[str, float]:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;Return caching statistics.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>        hit_rate <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>cache_hits <span style="color:#f92672">/</span> max(self<span style="color:#f92672">.</span>total_calls, <span style="color:#ae81ff">1</span>)
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> {
 </span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;cache_hits&#34;</span>: self<span style="color:#f92672">.</span>cache_hits,
 </span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;total_calls&#34;</span>: self<span style="color:#f92672">.</span>total_calls,
 </span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;hit_rate&#34;</span>: hit_rate
 </span></span><span style="display:flex;"><span>        }
-</span></span></code></pre></div><p>and then integrating this into a simplified diffusion model structure:</p>
+</span></span></code></pre></div><p>integrating this into a simplified diffusion model structure:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OptimizedDiffusionBlock</span>(nn<span style="color:#f92672">.</span>Module):
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, model: nn<span style="color:#f92672">.</span>Module, cache_threshold: float <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.12</span>):
 </span></span><span style="display:flex;"><span>        super()<span style="color:#f92672">.</span><span style="color:#a6e22e">__init__</span>()
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>model <span style="color:#f92672">=</span> model
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache <span style="color:#f92672">=</span> FirstBlockCache(cache_threshold)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># We need to identify where the &#34;first block&#34; ends</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># This is model-specific and would need to be adapted</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># we need to identify where the &#34;first block&#34; ends</span>
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>first_block_layers <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>_extract_first_block()
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>remaining_layers <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>_extract_remaining_layers()
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_extract_first_block</span>(self) <span style="color:#f92672">-&gt;</span> nn<span style="color:#f92672">.</span>Module:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;Extract the first block of layers from the model.&#34;&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># This is a simplified example - real implementation would</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># depend on the specific model architecture</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;extracting the first block of layers from the model.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>        layers <span style="color:#f92672">=</span> list(self<span style="color:#f92672">.</span>model<span style="color:#f92672">.</span>children())
-</span></span><span style="display:flex;"><span>        first_block_size <span style="color:#f92672">=</span> len(layers) <span style="color:#f92672">//</span> <span style="color:#ae81ff">4</span>  <span style="color:#75715e"># Use first 25% as &#34;first block&#34;</span>
+</span></span><span style="display:flex;"><span>        first_block_size <span style="color:#f92672">=</span> len(layers) <span style="color:#f92672">//</span> <span style="color:#ae81ff">4</span>  <span style="color:#75715e"># using first 25% as &#34;first block&#34;</span>
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> nn<span style="color:#f92672">.</span>Sequential(<span style="color:#f92672">*</span>layers[:first_block_size])
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_extract_remaining_layers</span>(self) <span style="color:#f92672">-&gt;</span> nn<span style="color:#f92672">.</span>Module:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;Extract the remaining layers after the first block.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>        layers <span style="color:#f92672">=</span> list(self<span style="color:#f92672">.</span>model<span style="color:#f92672">.</span>children())
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> len(layers) <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> nn<span style="color:#f92672">.</span>Identity()
 </span></span><span style="display:flex;"><span>        first_block_size <span style="color:#f92672">=</span> len(layers) <span style="color:#f92672">//</span> <span style="color:#ae81ff">4</span>
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> nn<span style="color:#f92672">.</span>Sequential(<span style="color:#f92672">*</span>layers[first_block_size:])
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x: torch<span style="color:#f92672">.</span>Tensor) <span style="color:#f92672">-&gt;</span> torch<span style="color:#f92672">.</span>Tensor:
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>total_calls <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Always run the first block</span>
 </span></span><span style="display:flex;"><span>        first_block_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>first_block_layers(x)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Check if we can skip the rest</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># can we skip the rest??</span>
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>should_skip_computation(first_block_output):
 </span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>get_cached_output()
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># Run the full computation</span>
 </span></span><span style="display:flex;"><span>        final_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>remaining_layers(first_block_output)
 </span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>update_cache(final_output)
 </span></span><span style="display:flex;"><span>        
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> final_output
-</span></span></code></pre></div><p>for integration with popular libraries like Diffusers, you&rsquo;d typically wrap the UNet model:</p>
+</span></span></code></pre></div><p>for integration with libraries like diffusers:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> diffusers <span style="color:#f92672">import</span> FluxPipeline
 </span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> torch
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">apply_first_block_caching</span>(pipe: FluxPipeline, threshold: float <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.12</span>):
-</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;Apply first block caching to a Flux pipeline.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;applying the first block caching to a Flux pipeline.&#34;&#34;&#34;</span>
 </span></span><span style="display:flex;"><span>    original_unet <span style="color:#f92672">=</span> pipe<span style="color:#f92672">.</span>transformer
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#75715e"># Create a wrapper that implements caching</span>
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CachedTransformer</span>(nn<span style="color:#f92672">.</span>Module):
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, original_model, cache_threshold):
 </span></span><span style="display:flex;"><span>            super()<span style="color:#f92672">.</span><span style="color:#a6e22e">__init__</span>()
@@ -279,18 +199,32 @@ Computation Time Comparison:
 </span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache <span style="color:#f92672">=</span> FirstBlockCache(cache_threshold)
 </span></span><span style="display:flex;"><span>            
 </span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
-</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># This would need to be implemented based on the specific</span>
-</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># architecture of the transformer blocks</span>
 </span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>_cached_forward(<span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_cached_forward</span>(self, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
-</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># Implementation would depend on transformer architecture</span>
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">pass</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_cached_forward</span>(self, hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
+</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>total_calls <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>            
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># for FLUX, we&#39;d need to identify the first transformer block</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># assuming we can get first block output somehow</span>
+</span></span><span style="display:flex;"><span>            first_block_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>_compute_first_block(hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
+</span></span><span style="display:flex;"><span>            
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>should_skip_computation(first_block_output):
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>get_cached_output()
+</span></span><span style="display:flex;"><span>            
+</span></span><span style="display:flex;"><span>            full_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>original_model(hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
+</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>update_cache(full_output)
+</span></span><span style="display:flex;"><span>            
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> full_output
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_compute_first_block</span>(self, hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
+</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">with</span> torch<span style="color:#f92672">.</span>no_grad():
+</span></span><span style="display:flex;"><span>                <span style="color:#75715e"># run a subset of the transformer layers</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> hidden_states
 </span></span><span style="display:flex;"><span>    
 </span></span><span style="display:flex;"><span>    pipe<span style="color:#f92672">.</span>transformer <span style="color:#f92672">=</span> CachedTransformer(original_unet, threshold)
 </span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> pipe
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># Usage example</span>
+</span></span><span style="display:flex;"><span><span style="color:#75715e"># example usage would be like:</span>
 </span></span><span style="display:flex;"><span>pipe <span style="color:#f92672">=</span> FluxPipeline<span style="color:#f92672">.</span>from_pretrained(<span style="color:#e6db74">&#34;black-forest-labs/FLUX.1-dev&#34;</span>)
 </span></span><span style="display:flex;"><span>pipe <span style="color:#f92672">=</span> apply_first_block_caching(pipe, residual_diff_threshold<span style="color:#f92672">=</span><span style="color:#ae81ff">0.12</span>)
 </span></span></code></pre></div>

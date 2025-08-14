@@ -6,21 +6,28 @@
     <description>Recent content on semih berkay öztürk</description>
     <generator>Hugo</generator>
     <language>en-us</language>
-    <lastBuildDate>Sun, 22 Jun 2025 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Wed, 13 Aug 2025 00:00:00 +0000</lastBuildDate>
     <atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Bookmarks</title>
+      <link>http://localhost:1313/bookmarks/</link>
+      <pubDate>Wed, 13 Aug 2025 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/bookmarks/</guid>
+      <description>&lt;p&gt;a curated collection of useful links, papers, and resources that I find valuable and want to reference again.&lt;/p&gt;&#xA;&lt;h2 id=&#34;machine-learning&#34;&gt;Machine Learning&lt;/h2&gt;&#xA;&lt;h2 id=&#34;rust&#34;&gt;Rust&lt;/h2&gt;&#xA;&lt;h2 id=&#34;computer-science&#34;&gt;Computer Science&lt;/h2&gt;&#xA;&lt;h2 id=&#34;distributed-systems&#34;&gt;Distributed Systems&lt;/h2&gt;&#xA;&lt;h2 id=&#34;database&#34;&gt;Database&lt;/h2&gt;&#xA;&lt;hr&gt;&#xA;&lt;p&gt;&lt;em&gt;Last updated: August 13, 2025&lt;/em&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>speeding up diffusion models with first block caching</title>
+      <link>http://localhost:1313/essays/first-block-caching/</link>
+      <pubDate>Wed, 13 Aug 2025 02:01:58 +0530</pubDate>
+      <guid>http://localhost:1313/essays/first-block-caching/</guid>
+      <description>&lt;p&gt;inference speed and quality is all you need from a diffusion model and one of the simplest but very effective optimization techniques is something called &lt;strong&gt;&amp;ldquo;first block caching&amp;rdquo;&lt;/strong&gt; that can significantly speed up inference with minimal quality loss.&lt;/p&gt;&#xA;&lt;h2 id=&#34;the-main-idea&#34;&gt;the main idea&lt;/h2&gt;&#xA;&lt;p&gt;the idea behind first block caching is dead simple: not every timestep in a diffusion model&amp;rsquo;s denoising process requires the same amount of computation. some steps produce large changes to the latent representation, while others make only minor adjustments. by detecting when a timestep will produce minimal changes, we can skip most of the computation for that step.&lt;/p&gt;</description>
+    </item>
     <item>
       <title>About</title>
       <link>http://localhost:1313/about/</link>
       <pubDate>Sun, 22 Jun 2025 00:00:00 +0000</pubDate>
       <guid>http://localhost:1313/about/</guid>
       <description>&lt;p&gt;I&amp;rsquo;m a backend developer interested in scalable systems, machine learning, and startups. I  like building things that are fast, reliable, and actually used.&lt;/p&gt;&#xA;&lt;p&gt;You can find what I’m working on here.&lt;/p&gt;</description>
-    </item>
-    <item>
-      <title>Escape competition</title>
-      <link>http://localhost:1313/essays/first/</link>
-      <pubDate>Sun, 01 Jun 2025 02:01:58 +0530</pubDate>
-      <guid>http://localhost:1313/essays/first/</guid>
-      <description></description>
     </item>
   </channel>
 </rss>

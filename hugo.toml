@@ -6,22 +6,27 @@ theme = 'archie'
 [params]
 	mode="dark"
 	useCDN=false
-	subtitle="Some cached thoughts on technology, startups, and more."
+	subtitle="some cached thoughts on technology, startups, and more."
 	
 [[menu.main]]
-name = "Home"
+name = "home"
 url = "/"
 weight = 1
 
 [[menu.main]]
-name = "Essays"
+name = "writings"
 url = "/essays"
 weight = 2
 
 [[menu.main]]
-name = "About"
-url = "/about"
+name = "bookmarks"
+url = "/bookmarks"
 weight = 3
+
+[[menu.main]]
+name = "about"
+url = "/about"
+weight = 4
 
 [[params.social]]
 name = "GitHub"
