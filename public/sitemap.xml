@@ -2,23 +2,20 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>http://localhost:1313/bookmarks/</loc>
-    <lastmod>2025-08-13T00:00:00+00:00</lastmod>
+    <loc>https://semihb.com/essays/</loc>
+    <lastmod>2025-08-13T02:01:58+05:30</lastmod>
   </url><url>
-    <loc>http://localhost:1313/</loc>
-    <lastmod>2025-08-13T00:00:00+00:00</lastmod>
+    <loc>https://semihb.com/</loc>
+    <lastmod>2025-08-13T02:01:58+05:30</lastmod>
   </url><url>
-    <loc>http://localhost:1313/about/</loc>
+    <loc>https://semihb.com/essays/first-block-caching/</loc>
+    <lastmod>2025-08-13T02:01:58+05:30</lastmod>
+  </url><url>
+    <loc>https://semihb.com/about/</loc>
     <lastmod>2025-06-22T00:00:00+00:00</lastmod>
   </url><url>
-    <loc>http://localhost:1313/essays/</loc>
-    <lastmod>2025-06-01T02:01:58+05:30</lastmod>
+    <loc>https://semihb.com/categories/</loc>
   </url><url>
-    <loc>http://localhost:1313/essays/first-block-caching/</loc>
-    <lastmod>2025-06-01T02:01:58+05:30</lastmod>
-  </url><url>
-    <loc>http://localhost:1313/categories/</loc>
-  </url><url>
-    <loc>http://localhost:1313/tags/</loc>
+    <loc>https://semihb.com/tags/</loc>
   </url>
 </urlset>

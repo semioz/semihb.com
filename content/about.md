@@ -6,6 +6,6 @@ aliases = ["about-me", "semih-ozturk", "profile"]
 author = "Ssemih Ozturk"
 +++
 
-i'm a backend developer interested in scalable systems, machine learning, and startups. i  like building things that are fast, reliable, and actually used.
+i'm a software engineer focused on rl post-training and backend engineering. i like building systems that are scalable, reliable, and useful in practice.
 
-you can find what I’m working on here.
+you can find what i'm working on here.
