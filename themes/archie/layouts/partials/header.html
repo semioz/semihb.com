@@ -33,14 +33,9 @@
 	    {{- end -}}
 	  {{- end -}}
 	{{- end -}}
-	{{ if .Site.Params.useCDN | default false -}}
-        <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@1,500&display=swap" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Fira+Sans&display=swap" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css?family=Roboto+Mono" rel="stylesheet">
-	{{- else -}}
-	{{ $fontstyle := resources.Get "css/fonts.css" | fingerprint }}
-        <link href="{{ $fontstyle.Permalink }}" rel="stylesheet">
-	{{ end }}
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 	{{ $style := resources.Get "css/main.css" | fingerprint }}
 	<link rel="stylesheet" type="text/css" media="screen" href="{{ $style.Permalink }}" />
