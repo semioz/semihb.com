@@ -1,0 +1,259 @@
+:root {
+  --maincolor: #fabd2f;
+  --bordercl: #d79921;
+  --callouctcolor: #d79921;
+  --hovercolor: #fabd2f;
+  --darkMaincolor: #fabd2f;
+  --bg: #1d2021;
+  --bg-soft: #282828;
+  --bg-muted: #3c3836;
+  --fg: #ebdbb2;
+  --fg-strong: #fbf1c7;
+  --fg-muted: #a89984;
+  --fg-inverse: #1d2021;
+  --border: #504945;
+  --selection-bg: #d79921;
+  --selection-fg: #1d2021;
+  --alert-color: #fb4934;
+  --tip-color: #fabd2f;
+  --warning-color: #fabd2f;
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+::-moz-selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+  text-shadow: none;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+  text-shadow: none;
+}
+
+hr {
+  border-top: 3px dotted var(--bordercl);
+}
+
+code {
+  background-color: var(--bg-muted);
+  color: var(--fg-strong);
+  font-family: 'Roboto Mono', monospace;
+  padding: 0.1em 0.2em;
+}
+
+pre {
+  background-color: var(--bg-soft);
+  color: var(--fg);
+  font-family: 'Roboto Mono', monospace;
+  line-height: 1.4;
+  overflow-x: auto;
+  padding: 1em;
+}
+
+blockquote {
+  border-color: var(--bordercl);
+  color: var(--fg-muted);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--fg-strong);
+}
+
+h1::before {
+  color: var(--darkMaincolor);
+  content: "# ";
+}
+
+h2::before {
+  color: var(--darkMaincolor);
+  content: "## ";
+}
+
+h3::before {
+  color: var(--darkMaincolor);
+  content: "### ";
+}
+
+h4::before {
+  color: var(--darkMaincolor);
+  content: "#### ";
+}
+
+h5::before {
+  color: var(--darkMaincolor);
+  content: "##### ";
+}
+
+h6::before {
+  color: var(--darkMaincolor);
+  content: "###### ";
+}
+
+.meta,
+time {
+  color: var(--fg-muted);
+}
+
+.toc {
+  background-color: var(--bg-soft);
+  color: var(--fg);
+}
+
+a {
+  border-bottom: 3px solid var(--darkMaincolor);
+  color: inherit;
+}
+
+a:hover {
+  background-color: var(--darkMaincolor);
+  color: var(--fg-inverse);
+}
+
+.site-description a {
+  color: var(--fg-strong);
+}
+
+.site-description a:hover {
+  color: var(--fg-inverse);
+}
+
+.tags a {
+  border-bottom: 3px solid var(--darkMaincolor);
+}
+
+.tags a:hover {
+  background-color: var(--darkMaincolor);
+  color: var(--fg-inverse);
+}
+
+.site-title a {
+  color: var(--fg-strong);
+  text-decoration: none !important;
+}
+
+.header nav,
+.footer {
+  border-color: var(--border);
+}
+
+img {
+  border-color: var(--border);
+}
+
+table th,
+table td {
+  border-color: var(--border);
+}
+
+.highlight {
+  background-color: var(--bg-muted);
+}
+
+.soc:hover {
+  color: var(--fg-inverse);
+}
+
+.draft-label {
+  color: var(--fg-inverse);
+  background-color: var(--bordercl);
+}
+
+.highlight pre code[class=language-javaScript]::before,
+.highlight pre code[class="language-js"]::before {
+  content: "js";
+  background: #fabd2f;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-yml']::before,
+.highlight pre code[class*='language-yaml']::before {
+  content: 'yaml';
+  background: #fb4934;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-shell']::before,
+.highlight pre code[class*='language-bash']::before,
+.highlight pre code[class*='language-sh']::before {
+  content: 'shell';
+  background: #fabd2f;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-json']::before {
+  content: 'json';
+  background: #83a598;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-python']::before,
+.highlight pre code[class*='language-py']::before {
+  content: 'py';
+  background: #d3869b;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-css']::before {
+  content: 'css';
+  background: #fabd2f;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-go']::before {
+  content: 'Go';
+  background: #83a598;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-md']::before,
+.highlight pre code[class*='language-md']::before {
+  content: 'Markdown';
+  background: #fe8019;
+  color: var(--fg-inverse);
+}
+
+.highlight pre code[class*='language-ts']::before {
+  content: 'TS';
+  background: #83a598;
+  color: var(--fg-inverse);
+}
+
+.callout-alert {
+  color: var(--fg);
+  background-color: transparent;
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--alert-color);
+}
+
+.callout-custom {
+  color: var(--fg);
+}
+
+.callout-tip {
+  color: var(--fg);
+  background-color: transparent;
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--tip-color);
+}
+
+.callout-warning {
+  color: var(--fg);
+  background-color: transparent;
+  border-width: 3px;
+  border-style: solid;
+  border-color: var(--warning-color);
+}

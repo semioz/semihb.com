@@ -1,35 +1,35 @@
 ---
-title: "speeding up diffusion models with first block caching"
+title: "Speeding up diffusion models with first block caching"
 date: 2025-08-13T02:01:58+05:30
-description: "how to speed up diffusion inference with minimal quality loss using first block caching"
+description: "How to speed up diffusion inference with minimal quality loss using first block caching"
 ---
 
-inference speed and quality is all you need from a diffusion model and one of the simplest but very effective optimization techniques is something called **"first block caching"** that can significantly speed up inference with minimal quality loss.
+Inference speed and quality is all you need from a diffusion model and one of the simplest but very effective optimization techniques is something called **"first block caching"** that can significantly speed up inference with minimal quality loss.
 
-## the main idea
+## The main idea
 
-the idea behind first block caching is dead simple: not every timestep in a diffusion model's denoising process requires the same amount of computation. some steps produce large changes to the latent representation, while others make only minor adjustments. by detecting when a timestep will produce minimal changes, we can skip most of the computation for that step.
+The idea behind first block caching is dead simple: not every timestep in a diffusion model's denoising process requires the same amount of computation. Some steps produce large changes to the latent representation, while others make only minor adjustments. By detecting when a timestep will produce minimal changes, we can skip most of the computation for that step.
 
-this technique builds on principles from the [TEACache paper](https://liewfeng.github.io/TeaCache/) and the [ParaAttention repository](https://github.com/chengzeyi/ParaAttention) implements a related but distinct approach called "first block caching".
+This technique builds on principles from the [TEACache paper](https://liewfeng.github.io/TeaCache/) and the [ParaAttention repository](https://github.com/chengzeyi/ParaAttention) implements a related but distinct approach called "first block caching".
 
-tl;dr: instead of predicting output differences from timestep embeddings, it computes the first portion of the network and uses that intermediate result to decide whether to continue or reuse cached outputs.
+TL;DR: instead of predicting output differences from timestep embeddings, it computes the first portion of the network and uses that intermediate result to decide whether to continue or reuse cached outputs.
 
-## how it works?
+## How it works?
 
-it operates on a simple but powerful principle:
+It operates on a simple but powerful principle:
 
-1. **divide the model into blocks** - the neural network's forward pass is split into sequential blocks
-2. **run the first block** - execute only the initial portion of the network
-3. **compare outputs** - check how much the intermediate representation changed compared to the previous timestep
-4. **make a decision** - if the change is below a threshold, skip the remaining blocks and reuse cached results
+1. **Divide the model into blocks** - the neural network's forward pass is split into sequential blocks
+2. **Run the first block** - execute only the initial portion of the network
+3. **Compare outputs** - check how much the intermediate representation changed compared to the previous timestep
+4. **Make a decision** - if the change is below a threshold, skip the remaining blocks and reuse cached results
 
-some visual representation of the process:
+Some visual representation of the process:
 
 ![first](/first.png)
 
-### memory and computation
+### Memory and computation
 
-how this caching may affect memory and computation over time hypothetically:
+How this caching may affect memory and computation over time hypothetically:
 
 ```
 Memory Usage Pattern:
@@ -62,9 +62,9 @@ Computation Time Comparison:
 └─────────────────────────────────────────────────────┘
 ```
 
-## minimal implementation with pytorch
+## Minimal implementation with PyTorch
 
-first, we'll create a basic caching mechanism with pure pytorch:
+First, we'll create a basic caching mechanism with pure PyTorch:
 
 ```python
 import torch
@@ -114,7 +114,7 @@ class FirstBlockCache:
         }
 ```
 
-integrating this into a simplified diffusion model structure:
+Integrating this into a simplified diffusion model structure:
 
 ```python
 class OptimizedDiffusionBlock(nn.Module):
@@ -155,7 +155,7 @@ class OptimizedDiffusionBlock(nn.Module):
         return final_output
 ```
 
-for integration with libraries like diffusers:
+For integration with libraries like Diffusers:
 
 ```python
 from diffusers import FluxPipeline

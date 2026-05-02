@@ -1,25 +1,25 @@
 ---
-title: "teaching a model to manage kv-cache memory"
+title: "Teaching a model to manage KV-cache memory"
 date: 2026-04-26T00:00:00+00:00
-description: "building an rl environment to learn how kv-cache eviction works in llm serving systems"
+description: "Building an RL environment to learn how KV-cache eviction works in LLM serving systems"
 ---
 
-i've been digging into how vllm, sglang, and nvidia's dynamo handle kv-cache under memory pressure. the papers describe the mechanics well enough, but the design tradeoffs only really clicked once i tried to encode them into a simulator. so i built an rl environment around the core problem: when the inference server's memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.
+I've been digging into how vLLM, SGLang, and NVIDIA's Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the design tradeoffs only really clicked once I tried to encode them into a simulator. So I built an RL environment around the core problem: when the inference server's memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.
 
-## the setting
+## The setting
 
-every time an llm generates tokens, it stores key/value tensors from attention in the kv-cache. one sequence can eat hundreds of megabytes. serve enough users concurrently and gpu memory fills up. at that point there are four options, all with tradeoffs:
+Every time an LLM generates tokens, it stores key/value tensors from attention in the KV-cache. One sequence can eat hundreds of megabytes. Serve enough users concurrently and GPU memory fills up. At that point there are four options, all with tradeoffs:
 
-- **evict** a sequence (frees the most memory, but that user gets an error)
-- **compress** the cache via quantization (fp16→int8→int4, halves memory each step)
-- **swap to cpu** (frees gpu memory but adds latency when the sequence is accessed again)
-- **do nothing** (fine when there's room, dangerous when there isn't)
+- **Evict** a sequence (frees the most memory, but that user gets an error)
+- **Compress** the cache via quantization (fp16→int8→int4, halves memory each step)
+- **Swap to CPU** (frees GPU memory but adds latency when the sequence is accessed again)
+- **Do nothing** (fine when there's room, dangerous when there isn't)
 
-most serving frameworks handle this with hand-tuned heuristics. i wanted to see what happens if you let a model learn the policy instead.
+Most serving frameworks handle this with hand-tuned heuristics. I wanted to see what happens if you let a model learn the policy instead.
 
-## building the simulator
+## Building the simulator
 
-the goal was something that captures the real dynamics of kv-cache management without reimplementing an entire serving stack. the core state is a set of cache entries, each representing one active sequence:
+The goal was something that captures the real dynamics of KV-cache management without reimplementing an entire serving stack. The core state is a set of cache entries, each representing one active sequence:
 
 ```python
 @dataclass
@@ -39,9 +39,9 @@ class CacheEntry:
     is_swapped: bool
 ```
 
-the most notable fields are `block_type` and `shared_prefix_id`.
+The most notable fields are `block_type` and `shared_prefix_id`.
 
-real serving systems don't treat all kv-cache the same. a system prompt gets reused every turn and evicting it would be catastrophic. reasoning tokens, on the other hand, have near-zero reuse once the thinking phase completes. following the mental model from [nvidia's dynamo full-stack optimizations blog](https://docs.nvidia.com/dynamo/dev/blog/agentic-inference), i categorize cache blocks by reuse likelihood:
+Real serving systems don't treat all KV-cache the same. A system prompt gets reused every turn and evicting it would be catastrophic. Reasoning tokens, on the other hand, have near-zero reuse once the thinking phase completes. Following the mental model from [NVIDIA's Dynamo full-stack optimizations blog](https://docs.nvidia.com/dynamo/dev/blog/agentic-inference), I categorize cache blocks by reuse likelihood:
 
 ```python
 BLOCK_TYPE_EVICTION_VALUE = {
@@ -53,9 +53,9 @@ BLOCK_TYPE_EVICTION_VALUE = {
 }
 ```
 
-in practice, many sequences in a batch share the same system prompt. vllm's paged attention deduplicates this — prefix pages exist once in memory with multiple sequences referencing them. the implication is that evicting a sequence sharing a prefix with five others might free almost nothing, because the prefix pages are still pinned by the remaining references. this makes eviction decisions non-local in a way that simple per-sequence heuristics miss.
+In practice, many sequences in a batch share the same system prompt. vLLM's paged attention deduplicates this — prefix pages exist once in memory with multiple sequences referencing them. The implication is that evicting a sequence sharing a prefix with five others might free almost nothing, because the prefix pages are still pinned by the remaining references. This makes eviction decisions non-local in a way that simple per-sequence heuristics miss.
 
-memory cost tracks paged allocation with quantization:
+Memory cost tracks paged allocation with quantization:
 
 ```python
 def memory_cost(self, cache_capacity, page_size=128):
@@ -65,13 +65,13 @@ def memory_cost(self, cache_capacity, page_size=128):
     return physical_tokens / cache_capacity
 ```
 
-each step, the simulator generates tokens for active sequences, tries to admit pending requests (fails them after 5 steps of waiting), spawns new arrivals, and naturally completes some sequences. the agent observes memory usage, cache entries ranked by cost, pre-scored eviction candidates, and queue pressure, then acts.
+Each step, the simulator generates tokens for active sequences, tries to admit pending requests (fails them after 5 steps of waiting), spawns new arrivals, and naturally completes some sequences. The agent observes memory usage, cache entries ranked by cost, pre-scored eviction candidates, and queue pressure, then acts.
 
-## the reward
+## The reward
 
-for the environment and training stack i used [prime intellect's](https://www.primeintellect.ai/) tooling, specifically [verifiers](https://github.com/PrimeIntellect-ai/verifiers), their framework for building rl environments with tool use. the environment is a `StatefulToolEnv`: the model calls cache-management tools, the simulator advances one step, and the reward functions score the final episode. most of the iteration was local eval work — run a few rollouts, inspect the reward breakdown, adjust the weights, and repeat.
+For the environment and training stack I used [Prime Intellect's](https://www.primeintellect.ai/) tooling, specifically [Verifiers](https://github.com/PrimeIntellect-ai/verifiers), their framework for building RL environments with tool use. The environment is a `StatefulToolEnv`: the model calls cache-management tools, the simulator advances one step, and the reward functions score the final episode. Most of the iteration was local eval work — run a few rollouts, inspect the reward breakdown, adjust the weights, and repeat.
 
-getting the reward right took a few iterations. the core tension is: eviction frees memory and prevents failures, but it also kills throughput. every reward component encodes one side of a tradeoff the policy needs to learn to balance.
+Getting the reward right took a few iterations. The core tension is: eviction frees memory and prevents failures, but it also kills throughput. Every reward component encodes one side of a tradeoff the policy needs to learn to balance.
 
 ```python
 rubric.add_reward_func(failure_penalty, weight=0.40)
@@ -83,29 +83,29 @@ rubric.add_reward_func(latency_penalty, weight=0.03)
 rubric.add_reward_func(risky_eviction_penalty, weight=0.02)
 ```
 
-### failure penalty (weight: 0.40)
+### Failure penalty (weight: 0.40)
 
-in real serving, failures cascade. one rejected request creates backpressure that causes more. the penalty reflects this with an accelerating cost:
+In real serving, failures cascade. One rejected request creates backpressure that causes more. The penalty reflects this with an accelerating cost:
 
 ```python
 penalty = min(failures * 0.15 + max(0, failures - 2) * 0.1, 1.0)
 ```
 
-the first two failures cost 0.15 each. after that, each additional failure costs 0.25. this means 1 failure = -0.15, 3 = -0.55, 5 = -1.0 (cap). a flat per-failure penalty doesn't work here — it treats "one unlucky timeout" the same as "the server is drowning," which gives the policy no reason to prevent cascades.
+The first two failures cost 0.15 each. After that, each additional failure costs 0.25. This means 1 failure = -0.15, 3 = -0.55, 5 = -1.0 (cap). A flat per-failure penalty doesn't work here — it treats "one unlucky timeout" the same as "the server is drowning," which gives the policy no reason to prevent cascades.
 
-### throughput reward (weight: 0.25)
+### Throughput reward (weight: 0.25)
 
-this is what keeps the policy from just evicting everything. it rewards total tokens generated across the episode, normalized against a realistic ceiling:
+This is what keeps the policy from just evicting everything. It rewards total tokens generated across the episode, normalized against a realistic ceiling:
 
 ```python
 normalized = min(total_tokens_generated / 500.0, 1.0)
 ```
 
-the normalization constant matters a lot (more on this in the bugs section). the weight at 0.25 creates a direct tension with the failure penalty — the policy has to keep enough sequences alive to generate tokens while freeing enough memory to prevent failures.
+The normalization constant matters a lot (more on this in the bugs section). The weight at 0.25 creates a direct tension with the failure penalty — the policy has to keep enough sequences alive to generate tokens while freeing enough memory to prevent failures.
 
-### headroom bonus (weight: 0.18)
+### Headroom bonus (weight: 0.18)
 
-this rewards proactive behavior. instead of just checking the final state, it tracks memory usage at every step and scores each one:
+This rewards proactive behavior. Instead of just checking the final state, it tracks memory usage at every step and scores each one:
 
 ```python
 for usage in memory_history:
@@ -121,11 +121,11 @@ for usage in memory_history:
 return (sum(headroom_scores) / len(headroom_scores)) * 0.4
 ```
 
-the key insight: rewarding only the final memory state teaches the policy to dump memory at the end. rewarding the average across the episode teaches it to maintain headroom continuously, which is what prevents failures in the first place. a step at 0.8 usage scores 5x more than a step at 0.98.
+The key insight: rewarding only the final memory state teaches the policy to dump memory at the end. Rewarding the average across the episode teaches it to maintain headroom continuously, which is what prevents failures in the first place. A step at 0.8 usage scores 5x more than a step at 0.98.
 
-### eviction quality (weight: 0.05)
+### Eviction quality (weight: 0.05)
 
-not all evictions are equal. evicting an ephemeral block is nearly free; evicting a system prompt is catastrophic. this reward checks what's left in the cache at the end:
+Not all evictions are equal. Evicting an ephemeral block is nearly free; evicting a system prompt is catastrophic. This reward checks what's left in the cache at the end:
 
 ```python
 for entry in cache.values():
@@ -133,11 +133,11 @@ for entry in cache.values():
 normalized = remaining_value / memory_usage
 ```
 
-higher score means the policy kept high-value blocks (system, context) and evicted low-value ones (reasoning, ephemeral). it's weighted low because the block type signal should emerge naturally from the failure and throughput rewards — this just provides a small nudge toward better targeting.
+Higher score means the policy kept high-value blocks (system, context) and evicted low-value ones (reasoning, ephemeral). It's weighted low because the block type signal should emerge naturally from the failure and throughput rewards — this just provides a small nudge toward better targeting.
 
-### risky eviction penalty (weight: 0.02)
+### Risky eviction penalty (weight: 0.02)
 
-a targeted penalty for specifically bad eviction decisions. it tracks every eviction event and penalizes based on what was evicted:
+A targeted penalty for specifically bad eviction decisions. It tracks every eviction event and penalizes based on what was evicted:
 
 ```python
 if block_type == "system":
@@ -148,25 +148,25 @@ if block_type == "generation" and priority >= 0.7 and progress >= 0.7:
     penalty += 0.2           # nearly-complete high-priority generation
 ```
 
-this is intentionally low-weight. it's a guardrail, not a primary signal — the policy should learn to avoid these through the other rewards, but this catches cases where the eviction quality reward is too blunt.
+This is intentionally low-weight. It's a guardrail, not a primary signal — the policy should learn to avoid these through the other rewards, but this catches cases where the eviction quality reward is too blunt.
 
-### latency penalty (weight: 0.03) and memory efficiency (weight: 0.07)
+### Latency penalty (weight: 0.03) and memory efficiency (weight: 0.07)
 
-the latency penalty discourages excessive swap-to-cpu usage: `min(total_swap_latency * 0.2, 0.3)`. swapping is a valid tool but has real costs — each cpu access adds 0.1-0.3 latency. without this, the policy would just swap everything instead of making hard eviction decisions.
+The latency penalty discourages excessive swap-to-CPU usage: `min(total_swap_latency * 0.2, 0.3)`. Swapping is a valid tool but has real costs — each CPU access adds 0.1-0.3 latency. Without this, the policy would just swap everything instead of making hard eviction decisions.
 
-memory efficiency is a step function on the final memory state — 0.2 for ending below 85% usage, 0.1 for below 95%, 0.0 for below 100%, and -0.2 for overflow. it rewards the policy for ending the episode in a healthy state rather than just barely surviving.
+Memory efficiency is a step function on the final memory state — 0.2 for ending below 85% usage, 0.1 for below 95%, 0.0 for below 100%, and -0.2 for overflow. It rewards the policy for ending the episode in a healthy state rather than just barely surviving.
 
-### why these weights
+### Why these weights
 
-the weight distribution reflects a priority ordering: avoid failures first, maintain throughput second, manage memory proactively third, everything else is refinement. the top three components (failure, throughput, headroom) account for 83% of the reward. the remaining 17% shapes the policy toward better eviction targeting and discourages degenerate strategies like swap-everything.
+The weight distribution reflects a priority ordering: avoid failures first, maintain throughput second, manage memory proactively third, everything else is refinement. The top three components (failure, throughput, headroom) account for 83% of the reward. The remaining 17% shapes the policy toward better eviction targeting and discourages degenerate strategies like swap-everything.
 
-the weights also need to produce a learnable reward landscape. if failure penalty dominates too much, the policy converges to "evict everything" and throughput collapses. if throughput is too strong, it learns to hoard sequences and failures spike. the balance point is where the optimal policy has to actually reason about which sequences to keep vs. evict based on block type, priority, and pressure level.
+The weights also need to produce a learnable reward landscape. If failure penalty dominates too much, the policy converges to "evict everything" and throughput collapses. If throughput is too strong, it learns to hoard sequences and failures spike. The balance point is where the optimal policy has to actually reason about which sequences to keep vs. evict based on block type, priority, and pressure level.
 
-## results
+## Results
 
-the reward design above is the result of iterating on an earlier version that had three environment bugs: the compress action was a no-op past the first call (hardcoded multiplier ignored int4), the system prompt enforced a single tool call per step (making it impossible to outpace memory growth), and the throughput normalization was 15x too high (killing the gradient signal). fixing those changed the reward landscape entirely.
+The reward design above is the result of iterating on an earlier version that had three environment bugs: the compress action was a no-op past the first call (hardcoded multiplier ignored int4), the system prompt enforced a single tool call per step (making it impossible to outpace memory growth), and the throughput normalization was 15x too high (killing the gradient signal). Fixing those changed the reward landscape entirely.
 
-same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:
+Same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:
 
 | metric | before | after |
 |---|---|---|
@@ -179,21 +179,21 @@ same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:
 | throughput reward | 0.037 | **0.139** |
 | headroom bonus | 0.081 | **0.321** |
 
-failures dropped from 7 to 1. memory pressure went from half the episode to near-zero. compress usage nearly tripled now that it actually works. the model averages ~3 actions per turn, mixing eviction and compression based on pressure level.
+Failures dropped from 7 to 1. Memory pressure went from half the episode to near-zero. Compress usage nearly tripled now that it actually works. The model averages ~3 actions per turn, mixing eviction and compression based on pressure level.
 
-the full rollout breakdown from `prime eval run`:
+The full rollout breakdown from `prime eval run`:
 
 ![rollout metrics and reward distribution](/rollouts.png)
 
 ![evaluation summary](/evalsum.png)
 
-## takeaways
+## Takeaways
 
-a few things that became much clearer through building the simulator than from reading about them:
+A few things that became much clearer through building the simulator than from reading about them:
 
-- **block types are central to good eviction policy**. a system prompt and a reasoning trace occupy the same memory but have completely different reuse profiles. treating them uniformly produces poor decisions.
-- **shared prefix deduplication creates non-local eviction effects**. the memory freed by evicting a sequence depends on what else references the same prefix pages — papers mention this but it's easy to underestimate.
-- **kv-cache compression deserves more attention**. fp16→int4 is a 4x memory reduction. the quality degradation is often acceptable, and it's strictly better than dropping the request. compression should be the first response under moderate pressure, not eviction.
-- **action space constraints need to match the system dynamics**. one action per scheduling cycle sounded elegant but made the control problem infeasible under sustained load. real serving systems make multiple decisions per cycle for the same reason.
+- **Block types are central to good eviction policy**. A system prompt and a reasoning trace occupy the same memory but have completely different reuse profiles. Treating them uniformly produces poor decisions.
+- **Shared prefix deduplication creates non-local eviction effects**. The memory freed by evicting a sequence depends on what else references the same prefix pages — papers mention this but it's easy to underestimate.
+- **KV-cache compression deserves more attention**. FP16→INT4 is a 4x memory reduction. The quality degradation is often acceptable, and it's strictly better than dropping the request. Compression should be the first response under moderate pressure, not eviction.
+- **Action space constraints need to match the system dynamics**. One action per scheduling cycle sounded elegant but made the control problem infeasible under sustained load. Real serving systems make multiple decisions per cycle for the same reason.
 
-the [environment code is on github](https://github.com/semioz) if you want to try it.
+The [environment code is on GitHub](https://github.com/semioz) if you want to try it.

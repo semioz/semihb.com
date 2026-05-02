@@ -1,25 +1,25 @@
 # Hugo configuration file
 baseURL = 'https://semihb.com/'
 languageCode = 'en-us'
-title = 'semih berkay öztürk'
+title = 'Semih Berkay Öztürk'
 theme = 'archie'
 [params]
 	mode="toggle"
 	useCDN=false
-	subtitle="some cached thoughts on my explorations"
+	subtitle="Some cached thoughts on my explorations"
 
 [[menu.main]]
-name = "home"
+name = "Home"
 url = "/"
 weight = 1
 
 [[menu.main]]
-name = "writings"
+name = "Writings"
 url = "/essays"
 weight = 2
 
 [[menu.main]]
-name = "about"
+name = "About"
 url = "/about"
 weight = 3
 
