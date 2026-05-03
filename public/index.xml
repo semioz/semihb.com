@@ -1,4 +1,33 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Semih Berkay Öztürk</title><link>https://semihb.com/</link><description>Recent content on Semih Berkay Öztürk</description><generator>Hugo</generator><language>en-us</language><lastBuildDate>Sun, 26 Apr 2026 00:00:00 +0000</lastBuildDate><atom:link href="https://semihb.com/index.xml" rel="self" type="application/rss+xml"/><item><title>Teaching a model to manage KV-cache memory</title><link>https://semihb.com/essays/kv-cache-eviction-rl/</link><pubDate>Sun, 26 Apr 2026 00:00:00 +0000</pubDate><guid>https://semihb.com/essays/kv-cache-eviction-rl/</guid><description>&lt;p&gt;I&amp;rsquo;ve been digging into how vLLM, SGLang, and NVIDIA&amp;rsquo;s Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the design tradeoffs only really clicked once I tried to encode them into a simulator. So I built an RL environment around the core problem: when the inference server&amp;rsquo;s memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.&lt;/p&gt;</description></item><item><title>Speeding up diffusion models with first block caching</title><link>https://semihb.com/essays/first-block-caching/</link><pubDate>Wed, 13 Aug 2025 02:01:58 +0530</pubDate><guid>https://semihb.com/essays/first-block-caching/</guid><description>&lt;p&gt;Inference speed and quality is all you need from a diffusion model and one of the simplest but very effective optimization techniques is something called &lt;strong&gt;&amp;ldquo;first block caching&amp;rdquo;&lt;/strong&gt; that can significantly speed up inference with minimal quality loss.&lt;/p&gt;
-&lt;h2 id="the-main-idea"&gt;The main idea&lt;/h2&gt;
-&lt;p&gt;The idea behind first block caching is dead simple: not every timestep in a diffusion model&amp;rsquo;s denoising process requires the same amount of computation. Some steps produce large changes to the latent representation, while others make only minor adjustments. By detecting when a timestep will produce minimal changes, we can skip most of the computation for that step.&lt;/p&gt;</description></item><item><title>About</title><link>https://semihb.com/about/</link><pubDate>Sun, 22 Jun 2025 00:00:00 +0000</pubDate><guid>https://semihb.com/about/</guid><description>&lt;p&gt;I&amp;rsquo;m a software engineer focused on rl post-training and backend engineering. I like building systems that are scalable, reliable, and useful in practice.&lt;/p&gt;
-&lt;p&gt;You can find what I&amp;rsquo;m working on here.&lt;/p&gt;</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Semih Berkay Öztürk</title>
+    <link>http://localhost:1313/</link>
+    <description>Recent content on Semih Berkay Öztürk</description>
+    <generator>Hugo</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sun, 26 Apr 2026 00:00:00 +0000</lastBuildDate>
+    <atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Teaching a model to manage KV-cache memory</title>
+      <link>http://localhost:1313/essays/kv-cache-eviction-rl/</link>
+      <pubDate>Sun, 26 Apr 2026 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/essays/kv-cache-eviction-rl/</guid>
+      <description>&lt;p&gt;I&amp;rsquo;ve been digging into how vLLM, SGLang, and NVIDIA&amp;rsquo;s Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the design tradeoffs only really clicked once I tried to encode them into a simulator. So I built an RL environment around the core problem: when the inference server&amp;rsquo;s memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Speeding up diffusion models with first block caching</title>
+      <link>http://localhost:1313/essays/first-block-caching/</link>
+      <pubDate>Wed, 13 Aug 2025 02:01:58 +0530</pubDate>
+      <guid>http://localhost:1313/essays/first-block-caching/</guid>
+      <description>&lt;p&gt;Inference speed and quality is all you need from a diffusion model and one of the simplest but very effective optimization techniques is something called &lt;strong&gt;&amp;ldquo;first block caching&amp;rdquo;&lt;/strong&gt; that can significantly speed up inference with minimal quality loss.&lt;/p&gt;&#xA;&lt;h2 id=&#34;the-main-idea&#34;&gt;The main idea&lt;/h2&gt;&#xA;&lt;p&gt;The idea behind first block caching is dead simple: not every timestep in a diffusion model&amp;rsquo;s denoising process requires the same amount of computation. Some steps produce large changes to the latent representation, while others make only minor adjustments. By detecting when a timestep will produce minimal changes, we can skip most of the computation for that step.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>About</title>
+      <link>http://localhost:1313/about/</link>
+      <pubDate>Sun, 22 Jun 2025 00:00:00 +0000</pubDate>
+      <guid>http://localhost:1313/about/</guid>
+      <description>&lt;p&gt;I&amp;rsquo;m a software engineer focused on rl post-training and backend engineering. I like building systems that are scalable, reliable, and useful in practice.&lt;/p&gt;&#xA;&lt;p&gt;You can find what I&amp;rsquo;m working on here.&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>

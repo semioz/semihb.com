@@ -4,7 +4,7 @@ languageCode = 'en-us'
 title = 'Semih Berkay Öztürk'
 theme = 'archie'
 [params]
-	mode="toggle"
+	mode="dark"
 	useCDN=false
 	subtitle="Some cached thoughts on my explorations"
 

@@ -1,22 +1,22 @@
 :root {
-  --maincolor: #ff5a00;
-  --bordercl: #ff5a00;
-  --callouctcolor: #ff5a00;
-  --hovercolor: #ff5a00;
-  --darkMaincolor: #ff5a00;
-  --bg: #151617;
-  --bg-soft: #1b1c1d;
-  --bg-muted: #242526;
-  --fg: #ffffff;
-  --fg-strong: #ffffff;
-  --fg-muted: #c8c8c8;
-  --fg-inverse: #ffffff;
-  --border: #343536;
-  --selection-bg: #ff5a00;
-  --selection-fg: #ffffff;
-  --alert-color: #ff5a00;
-  --tip-color: #ff5a00;
-  --warning-color: #ff5a00;
+  --maincolor: #fabd2f;
+  --bordercl: #d79921;
+  --callouctcolor: #d79921;
+  --hovercolor: #fabd2f;
+  --darkMaincolor: #fabd2f;
+  --bg: #1d2021;
+  --bg-soft: #282828;
+  --bg-muted: #32302f;
+  --fg: #ebdbb2;
+  --fg-strong: #fbf1c7;
+  --fg-muted: #a89984;
+  --fg-inverse: #282828;
+  --border: #504945;
+  --selection-bg: #d79921;
+  --selection-fg: #282828;
+  --alert-color: #fb4934;
+  --tip-color: #fabd2f;
+  --warning-color: #fabd2f;
 }
 
 html,
@@ -171,14 +171,14 @@ table td {
 .highlight pre code[class=language-javaScript]::before,
 .highlight pre code[class="language-js"]::before {
   content: "js";
-  background: var(--darkMaincolor);
+  background: #fabd2f;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-yml']::before,
 .highlight pre code[class*='language-yaml']::before {
   content: 'yaml';
-  background: var(--darkMaincolor);
+  background: #fb4934;
   color: var(--fg-inverse);
 }
 
@@ -186,45 +186,45 @@ table td {
 .highlight pre code[class*='language-bash']::before,
 .highlight pre code[class*='language-sh']::before {
   content: 'shell';
-  background: var(--darkMaincolor);
+  background: #fabd2f;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-json']::before {
   content: 'json';
-  background: var(--darkMaincolor);
+  background: #83a598;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-python']::before,
 .highlight pre code[class*='language-py']::before {
   content: 'py';
-  background: var(--darkMaincolor);
+  background: #d3869b;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-css']::before {
   content: 'css';
-  background: var(--darkMaincolor);
+  background: #fabd2f;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-go']::before {
   content: 'Go';
-  background: var(--darkMaincolor);
+  background: #83a598;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-md']::before,
 .highlight pre code[class*='language-md']::before {
   content: 'Markdown';
-  background: var(--darkMaincolor);
+  background: #fe8019;
   color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-ts']::before {
   content: 'TS';
-  background: var(--darkMaincolor);
+  background: #83a598;
   color: var(--fg-inverse);
 }
 

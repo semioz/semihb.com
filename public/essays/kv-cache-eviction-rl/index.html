@@ -1,61 +1,250 @@
-<!doctype html><html><head lang=en><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><title>Teaching a model to manage KV-cache memory - Semih Berkay Öztürk</title><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Building an RL environment to learn how KV-cache eviction works in LLM serving systems"><meta property="og:image" content><meta property="og:url" content="https://semihb.com/essays/kv-cache-eviction-rl/"><meta property="og:site_name" content="Semih Berkay Öztürk"><meta property="og:title" content="Teaching a model to manage KV-cache memory"><meta property="og:description" content="Building an RL environment to learn how KV-cache eviction works in LLM serving systems"><meta property="og:locale" content="en_us"><meta property="og:type" content="article"><meta property="article:section" content="essays"><meta property="article:published_time" content="2026-04-26T00:00:00+00:00"><meta property="article:modified_time" content="2026-04-26T00:00:00+00:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="Teaching a model to manage KV-cache memory"><meta name=twitter:description content="Building an RL environment to learn how KV-cache eviction works in LLM serving systems"><link href=https://semihb.com/css/fonts.b4e80957a67274387d495fb9178a84dfc3401f32c3256dec20131802a21ef7c1.css rel=stylesheet><link rel=stylesheet type=text/css media=screen href=https://semihb.com/css/main.b97547ab9fb313ba62828554e82528bc29cefefee090d3d5addcfe508a3522a6.css><link id=darkModeStyle rel=stylesheet type=text/css href=https://semihb.com/css/dark.4426f5f125995637227753025452b06593a0f8493ec308fdcf90b904d79ed62d.css disabled></head><body><div class=content><header><div class=main><a href=https://semihb.com/>Semih Berkay Öztürk</a></div><nav><a href=/>Home</a>
-<a href=/essays>Writings</a>
-<a href=/about>About</a>
-| <span id=dark-mode-toggle onclick=toggleTheme()><svg class="feather"><use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#sun"/></svg></span>
-<script src=https://semihb.com/js/themetoggle.js></script></nav></header><main><article><div class=post-container><div class=post-content><div class=title><h1 class=title>Teaching a model to manage KV-cache memory</h1><div class=meta>Posted on Apr 26, 2026</div></div><section class=body><p>I&rsquo;ve been digging into how vLLM, SGLang, and NVIDIA&rsquo;s Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the design tradeoffs only really clicked once I tried to encode them into a simulator. So I built an RL environment around the core problem: when the inference server&rsquo;s memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.</p><h2 id=the-setting>The setting</h2><p>Every time an LLM generates tokens, it stores key/value tensors from attention in the KV-cache. One sequence can eat hundreds of megabytes. Serve enough users concurrently and GPU memory fills up. At that point there are four options, all with tradeoffs:</p><ul><li><strong>Evict</strong> a sequence (frees the most memory, but that user gets an error)</li><li><strong>Compress</strong> the cache via quantization (fp16→int8→int4, halves memory each step)</li><li><strong>Swap to CPU</strong> (frees GPU memory but adds latency when the sequence is accessed again)</li><li><strong>Do nothing</strong> (fine when there&rsquo;s room, dangerous when there isn&rsquo;t)</li></ul><p>Most serving frameworks handle this with hand-tuned heuristics. I wanted to see what happens if you let a model learn the policy instead.</p><h2 id=building-the-simulator>Building the simulator</h2><p>The goal was something that captures the real dynamics of KV-cache management without reimplementing an entire serving stack. The core state is a set of cache entries, each representing one active sequence:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#a6e22e>@dataclass</span>
-</span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>CacheEntry</span>:
-</span></span><span style=display:flex><span>    seq_id: str
-</span></span><span style=display:flex><span>    tokens_cached: int
-</span></span><span style=display:flex><span>    sequence_length: int
-</span></span><span style=display:flex><span>    last_access_step: int
-</span></span><span style=display:flex><span>    token_gen_rate: float      <span style=color:#75715e># tokens/step being generated</span>
-</span></span><span style=display:flex><span>    priority: float            <span style=color:#75715e># 0-1, higher = more important</span>
-</span></span><span style=display:flex><span>    block_type: BlockType      <span style=color:#75715e># system/context/generation/reasoning/ephemeral</span>
-</span></span><span style=display:flex><span>    quantization_level: QuantizationLevel  <span style=color:#75715e># fp16/int8/int4</span>
-</span></span><span style=display:flex><span>    shared_prefix_id: str <span style=color:#f92672>|</span> <span style=color:#66d9ef>None</span>
-</span></span><span style=display:flex><span>    phase: PhaseType           <span style=color:#75715e># prefill/decode/reasoning/idle</span>
-</span></span><span style=display:flex><span>    hotness: float
-</span></span><span style=display:flex><span>    is_compressed: bool
-</span></span><span style=display:flex><span>    is_swapped: bool
-</span></span></code></pre></div><p>The most notable fields are <code>block_type</code> and <code>shared_prefix_id</code>.</p><p>Real serving systems don&rsquo;t treat all KV-cache the same. A system prompt gets reused every turn and evicting it would be catastrophic. Reasoning tokens, on the other hand, have near-zero reuse once the thinking phase completes. Following the mental model from <a href=https://docs.nvidia.com/dynamo/dev/blog/agentic-inference>NVIDIA&rsquo;s Dynamo full-stack optimizations blog</a>, I categorize cache blocks by reuse likelihood:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>BLOCK_TYPE_EVICTION_VALUE <span style=color:#f92672>=</span> {
-</span></span><span style=display:flex><span>    <span style=color:#e6db74>&#34;system&#34;</span>: <span style=color:#ae81ff>0.0</span>,      <span style=color:#75715e># highest reuse, never evict</span>
-</span></span><span style=display:flex><span>    <span style=color:#e6db74>&#34;context&#34;</span>: <span style=color:#ae81ff>0.25</span>,    <span style=color:#75715e># conversation history — high reuse</span>
-</span></span><span style=display:flex><span>    <span style=color:#e6db74>&#34;generation&#34;</span>: <span style=color:#ae81ff>0.5</span>,  <span style=color:#75715e># active generation — moderate reuse</span>
-</span></span><span style=display:flex><span>    <span style=color:#e6db74>&#34;reasoning&#34;</span>: <span style=color:#ae81ff>0.9</span>,   <span style=color:#75715e># thinking tokens — near-zero reuse after completion</span>
-</span></span><span style=display:flex><span>    <span style=color:#e6db74>&#34;ephemeral&#34;</span>: <span style=color:#ae81ff>1.0</span>,   <span style=color:#75715e># subagent/temp — zero reuse, safe to evict</span>
-</span></span><span style=display:flex><span>}
-</span></span></code></pre></div><p>In practice, many sequences in a batch share the same system prompt. vLLM&rsquo;s paged attention deduplicates this — prefix pages exist once in memory with multiple sequences referencing them. The implication is that evicting a sequence sharing a prefix with five others might free almost nothing, because the prefix pages are still pinned by the remaining references. This makes eviction decisions non-local in a way that simple per-sequence heuristics miss.</p><p>Memory cost tracks paged allocation with quantization:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>memory_cost</span>(self, cache_capacity, page_size<span style=color:#f92672>=</span><span style=color:#ae81ff>128</span>):
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> self<span style=color:#f92672>.</span>is_swapped:
-</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0.0</span>
-</span></span><span style=display:flex><span>    physical_tokens <span style=color:#f92672>=</span> self<span style=color:#f92672>.</span>allocated_pages(page_size) <span style=color:#f92672>*</span> page_size <span style=color:#f92672>*</span> self<span style=color:#f92672>.</span>quantization_multiplier()
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> physical_tokens <span style=color:#f92672>/</span> cache_capacity
-</span></span></code></pre></div><p>Each step, the simulator generates tokens for active sequences, tries to admit pending requests (fails them after 5 steps of waiting), spawns new arrivals, and naturally completes some sequences. The agent observes memory usage, cache entries ranked by cost, pre-scored eviction candidates, and queue pressure, then acts.</p><h2 id=the-reward>The reward</h2><p>For the environment and training stack I used <a href=https://www.primeintellect.ai/>Prime Intellect&rsquo;s</a> tooling, specifically <a href=https://github.com/PrimeIntellect-ai/verifiers>Verifiers</a>, their framework for building RL environments with tool use. The environment is a <code>StatefulToolEnv</code>: the model calls cache-management tools, the simulator advances one step, and the reward functions score the final episode. Most of the iteration was local eval work — run a few rollouts, inspect the reward breakdown, adjust the weights, and repeat.</p><p>Getting the reward right took a few iterations. The core tension is: eviction frees memory and prevents failures, but it also kills throughput. Every reward component encodes one side of a tradeoff the policy needs to learn to balance.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(failure_penalty, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.40</span>)
-</span></span><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(throughput_reward, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.25</span>)
-</span></span><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(headroom_bonus, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.18</span>)
-</span></span><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(memory_efficiency, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.07</span>)
-</span></span><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(eviction_quality, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.05</span>)
-</span></span><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(latency_penalty, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.03</span>)
-</span></span><span style=display:flex><span>rubric<span style=color:#f92672>.</span>add_reward_func(risky_eviction_penalty, weight<span style=color:#f92672>=</span><span style=color:#ae81ff>0.02</span>)
-</span></span></code></pre></div><h3 id=failure-penalty-weight-040>Failure penalty (weight: 0.40)</h3><p>In real serving, failures cascade. One rejected request creates backpressure that causes more. The penalty reflects this with an accelerating cost:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>penalty <span style=color:#f92672>=</span> min(failures <span style=color:#f92672>*</span> <span style=color:#ae81ff>0.15</span> <span style=color:#f92672>+</span> max(<span style=color:#ae81ff>0</span>, failures <span style=color:#f92672>-</span> <span style=color:#ae81ff>2</span>) <span style=color:#f92672>*</span> <span style=color:#ae81ff>0.1</span>, <span style=color:#ae81ff>1.0</span>)
-</span></span></code></pre></div><p>The first two failures cost 0.15 each. After that, each additional failure costs 0.25. This means 1 failure = -0.15, 3 = -0.55, 5 = -1.0 (cap). A flat per-failure penalty doesn&rsquo;t work here — it treats &ldquo;one unlucky timeout&rdquo; the same as &ldquo;the server is drowning,&rdquo; which gives the policy no reason to prevent cascades.</p><h3 id=throughput-reward-weight-025>Throughput reward (weight: 0.25)</h3><p>This is what keeps the policy from just evicting everything. It rewards total tokens generated across the episode, normalized against a realistic ceiling:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>normalized <span style=color:#f92672>=</span> min(total_tokens_generated <span style=color:#f92672>/</span> <span style=color:#ae81ff>500.0</span>, <span style=color:#ae81ff>1.0</span>)
-</span></span></code></pre></div><p>The normalization constant matters a lot (more on this in the bugs section). The weight at 0.25 creates a direct tension with the failure penalty — the policy has to keep enough sequences alive to generate tokens while freeing enough memory to prevent failures.</p><h3 id=headroom-bonus-weight-018>Headroom bonus (weight: 0.18)</h3><p>This rewards proactive behavior. Instead of just checking the final state, it tracks memory usage at every step and scores each one:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#66d9ef>for</span> usage <span style=color:#f92672>in</span> memory_history:
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> usage <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0.8</span>:
-</span></span><span style=display:flex><span>        headroom_scores<span style=color:#f92672>.</span>append(<span style=color:#ae81ff>1.0</span>)     <span style=color:#75715e># excellent</span>
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>elif</span> usage <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0.95</span>:
-</span></span><span style=display:flex><span>        headroom_scores<span style=color:#f92672>.</span>append(<span style=color:#ae81ff>0.5</span>)     <span style=color:#75715e># acceptable</span>
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>elif</span> usage <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>1.0</span>:
-</span></span><span style=display:flex><span>        headroom_scores<span style=color:#f92672>.</span>append(<span style=color:#ae81ff>0.2</span>)     <span style=color:#75715e># tight</span>
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>:
-</span></span><span style=display:flex><span>        headroom_scores<span style=color:#f92672>.</span>append(<span style=color:#f92672>-</span><span style=color:#ae81ff>0.5</span>)    <span style=color:#75715e># over budget</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=color:#66d9ef>return</span> (sum(headroom_scores) <span style=color:#f92672>/</span> len(headroom_scores)) <span style=color:#f92672>*</span> <span style=color:#ae81ff>0.4</span>
-</span></span></code></pre></div><p>The key insight: rewarding only the final memory state teaches the policy to dump memory at the end. Rewarding the average across the episode teaches it to maintain headroom continuously, which is what prevents failures in the first place. A step at 0.8 usage scores 5x more than a step at 0.98.</p><h3 id=eviction-quality-weight-005>Eviction quality (weight: 0.05)</h3><p>Not all evictions are equal. Evicting an ephemeral block is nearly free; evicting a system prompt is catastrophic. This reward checks what&rsquo;s left in the cache at the end:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#66d9ef>for</span> entry <span style=color:#f92672>in</span> cache<span style=color:#f92672>.</span>values():
-</span></span><span style=display:flex><span>    remaining_value <span style=color:#f92672>+=</span> (<span style=color:#ae81ff>1.0</span> <span style=color:#f92672>-</span> entry<span style=color:#f92672>.</span>eviction_value) <span style=color:#f92672>*</span> entry<span style=color:#f92672>.</span>memory_cost(cache_capacity)
-</span></span><span style=display:flex><span>normalized <span style=color:#f92672>=</span> remaining_value <span style=color:#f92672>/</span> memory_usage
-</span></span></code></pre></div><p>Higher score means the policy kept high-value blocks (system, context) and evicted low-value ones (reasoning, ephemeral). It&rsquo;s weighted low because the block type signal should emerge naturally from the failure and throughput rewards — this just provides a small nudge toward better targeting.</p><h3 id=risky-eviction-penalty-weight-002>Risky eviction penalty (weight: 0.02)</h3><p>A targeted penalty for specifically bad eviction decisions. It tracks every eviction event and penalizes based on what was evicted:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#66d9ef>if</span> block_type <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;system&#34;</span>:
-</span></span><span style=display:flex><span>    penalty <span style=color:#f92672>+=</span> <span style=color:#ae81ff>0.3</span>           <span style=color:#75715e># evicting a system prompt is always wrong</span>
-</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> block_type <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;context&#34;</span> <span style=color:#f92672>and</span> priority <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>0.5</span>:
-</span></span><span style=display:flex><span>    penalty <span style=color:#f92672>+=</span> <span style=color:#ae81ff>0.15</span>          <span style=color:#75715e># high-priority context is expensive to lose</span>
-</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> block_type <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;generation&#34;</span> <span style=color:#f92672>and</span> priority <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>0.7</span> <span style=color:#f92672>and</span> progress <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>0.7</span>:
-</span></span><span style=display:flex><span>    penalty <span style=color:#f92672>+=</span> <span style=color:#ae81ff>0.2</span>           <span style=color:#75715e># nearly-complete high-priority generation</span>
-</span></span></code></pre></div><p>This is intentionally low-weight. It&rsquo;s a guardrail, not a primary signal — the policy should learn to avoid these through the other rewards, but this catches cases where the eviction quality reward is too blunt.</p><h3 id=latency-penalty-weight-003-and-memory-efficiency-weight-007>Latency penalty (weight: 0.03) and memory efficiency (weight: 0.07)</h3><p>The latency penalty discourages excessive swap-to-CPU usage: <code>min(total_swap_latency * 0.2, 0.3)</code>. Swapping is a valid tool but has real costs — each CPU access adds 0.1-0.3 latency. Without this, the policy would just swap everything instead of making hard eviction decisions.</p><p>Memory efficiency is a step function on the final memory state — 0.2 for ending below 85% usage, 0.1 for below 95%, 0.0 for below 100%, and -0.2 for overflow. It rewards the policy for ending the episode in a healthy state rather than just barely surviving.</p><h3 id=why-these-weights>Why these weights</h3><p>The weight distribution reflects a priority ordering: avoid failures first, maintain throughput second, manage memory proactively third, everything else is refinement. The top three components (failure, throughput, headroom) account for 83% of the reward. The remaining 17% shapes the policy toward better eviction targeting and discourages degenerate strategies like swap-everything.</p><p>The weights also need to produce a learnable reward landscape. If failure penalty dominates too much, the policy converges to &ldquo;evict everything&rdquo; and throughput collapses. If throughput is too strong, it learns to hoard sequences and failures spike. The balance point is where the optimal policy has to actually reason about which sequences to keep vs. evict based on block type, priority, and pressure level.</p><h2 id=results>Results</h2><p>The reward design above is the result of iterating on an earlier version that had three environment bugs: the compress action was a no-op past the first call (hardcoded multiplier ignored int4), the system prompt enforced a single tool call per step (making it impossible to outpace memory growth), and the throughput normalization was 15x too high (killing the gradient signal). Fixing those changed the reward landscape entirely.</p><p>Same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:</p><table><thead><tr><th>metric</th><th>before</th><th>after</th></tr></thead><tbody><tr><td><strong>reward</strong></td><td>-0.090</td><td><strong>+0.043</strong></td></tr><tr><td>failures per episode</td><td>7.0</td><td><strong>1.0</strong></td></tr><tr><td>pressure steps</td><td>7.6</td><td><strong>1.2</strong></td></tr><tr><td>tool calls per turn</td><td>1.0</td><td><strong>2.9</strong></td></tr><tr><td>evict calls</td><td>6.8</td><td><strong>17.4</strong></td></tr><tr><td>compress calls</td><td>5.0</td><td><strong>14.4</strong></td></tr><tr><td>throughput reward</td><td>0.037</td><td><strong>0.139</strong></td></tr><tr><td>headroom bonus</td><td>0.081</td><td><strong>0.321</strong></td></tr></tbody></table><p>Failures dropped from 7 to 1. Memory pressure went from half the episode to near-zero. Compress usage nearly tripled now that it actually works. The model averages ~3 actions per turn, mixing eviction and compression based on pressure level.</p><p>The full rollout breakdown from <code>prime eval run</code>:</p><p><img src=/rollouts.png alt="rollout metrics and reward distribution"></p><p><img src=/evalsum.png alt="evaluation summary"></p><h2 id=takeaways>Takeaways</h2><p>A few things that became much clearer through building the simulator than from reading about them:</p><ul><li><strong>Block types are central to good eviction policy</strong>. A system prompt and a reasoning trace occupy the same memory but have completely different reuse profiles. Treating them uniformly produces poor decisions.</li><li><strong>Shared prefix deduplication creates non-local eviction effects</strong>. The memory freed by evicting a sequence depends on what else references the same prefix pages — papers mention this but it&rsquo;s easy to underestimate.</li><li><strong>KV-cache compression deserves more attention</strong>. FP16→INT4 is a 4x memory reduction. The quality degradation is often acceptable, and it&rsquo;s strictly better than dropping the request. Compression should be the first response under moderate pressure, not eviction.</li><li><strong>Action space constraints need to match the system dynamics</strong>. One action per scheduling cycle sounded elegant but made the control problem infeasible under sustained load. Real serving systems make multiple decisions per cycle for the same reason.</li></ul><p>The <a href=https://github.com/semioz>environment code is on GitHub</a> if you want to try it.</p></section><div class=post-tags></div></div></div></article></main><footer><div style=display:flex><a class=soc href=https://github.com/semioz/ rel=me title=GitHub><svg class="feather"><use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#github"/></svg></a><a class=border></a><a class=soc href=https://www.linkedin.com/in/semioz/ rel=me title=LinkedIn><svg class="feather"><use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#linkedin"/></svg></a><a class=border></a><a class=soc href=https://x.com/semiozz rel=me title=X><svg class="feather"><use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#x"/></svg></a><a class=border></a></div><div class=footer-info>2026 - Semih Berkay Ozturk</div></footer></div></body></html>
+<!DOCTYPE html>
+<html><head lang="en"><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+	<meta charset="utf-8" />
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"><title>Teaching a model to manage KV-cache memory - Semih Berkay Öztürk</title><meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Building an RL environment to learn how KV-cache eviction works in LLM serving systems" />
+	<meta property="og:image" content=""/>
+	<meta property="og:url" content="http://localhost:1313/essays/kv-cache-eviction-rl/">
+  <meta property="og:site_name" content="Semih Berkay Öztürk">
+  <meta property="og:title" content="Teaching a model to manage KV-cache memory">
+  <meta property="og:description" content="Building an RL environment to learn how KV-cache eviction works in LLM serving systems">
+  <meta property="og:locale" content="en_us">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="essays">
+    <meta property="article:published_time" content="2026-04-26T00:00:00+00:00">
+    <meta property="article:modified_time" content="2026-04-26T00:00:00+00:00">
+
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Teaching a model to manage KV-cache memory">
+  <meta name="twitter:description" content="Building an RL environment to learn how KV-cache eviction works in LLM serving systems">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+	
+	<link rel="stylesheet" type="text/css" media="screen" href="http://localhost:1313/css/main.d925c016a2b4f43f3ae2b97b131101363ba36499f5c601ca061c5588a16d369d.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="http://localhost:1313/css/dark.0fc4b67ea8225503fa206c608854e394cbf059a183a7ff401c5322cde4501913.css"   />
+</head>
+<body>
+        <div class="content"><header>
+	<div class="main">
+		<a href="http://localhost:1313/">Semih Berkay Öztürk</a>
+	</div>
+	<nav>
+		
+		<a href="/">Home</a>
+		
+		<a href="/essays">Writings</a>
+		
+		<a href="/about">About</a>
+		
+		
+	</nav>
+</header>
+
+<main>
+  <article>
+    <div class="post-container">
+      
+      <div class="post-content">
+        <div class="title">
+          <h1 class="title">Teaching a model to manage KV-cache memory</h1>
+          <div class="meta">Posted on Apr 26, 2026</div>
+        </div>
+        
+        <section class="body">
+          <p>I&rsquo;ve been digging into how vLLM, SGLang, and NVIDIA&rsquo;s Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the design tradeoffs only really clicked once I tried to encode them into a simulator. So I built an RL environment around the core problem: when the inference server&rsquo;s memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.</p>
+<h2 id="the-setting">The setting</h2>
+<p>Every time an LLM generates tokens, it stores key/value tensors from attention in the KV-cache. One sequence can eat hundreds of megabytes. Serve enough users concurrently and GPU memory fills up. At that point there are four options, all with tradeoffs:</p>
+<ul>
+<li><strong>Evict</strong> a sequence (frees the most memory, but that user gets an error)</li>
+<li><strong>Compress</strong> the cache via quantization (fp16→int8→int4, halves memory each step)</li>
+<li><strong>Swap to CPU</strong> (frees GPU memory but adds latency when the sequence is accessed again)</li>
+<li><strong>Do nothing</strong> (fine when there&rsquo;s room, dangerous when there isn&rsquo;t)</li>
+</ul>
+<p>Most serving frameworks handle this with hand-tuned heuristics. I wanted to see what happens if you let a model learn the policy instead.</p>
+<h2 id="building-the-simulator">Building the simulator</h2>
+<p>The goal was something that captures the real dynamics of KV-cache management without reimplementing an entire serving stack. The core state is a set of cache entries, each representing one active sequence:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#a6e22e">@dataclass</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CacheEntry</span>:
+</span></span><span style="display:flex;"><span>    seq_id: str
+</span></span><span style="display:flex;"><span>    tokens_cached: int
+</span></span><span style="display:flex;"><span>    sequence_length: int
+</span></span><span style="display:flex;"><span>    last_access_step: int
+</span></span><span style="display:flex;"><span>    token_gen_rate: float      <span style="color:#75715e"># tokens/step being generated</span>
+</span></span><span style="display:flex;"><span>    priority: float            <span style="color:#75715e"># 0-1, higher = more important</span>
+</span></span><span style="display:flex;"><span>    block_type: BlockType      <span style="color:#75715e"># system/context/generation/reasoning/ephemeral</span>
+</span></span><span style="display:flex;"><span>    quantization_level: QuantizationLevel  <span style="color:#75715e"># fp16/int8/int4</span>
+</span></span><span style="display:flex;"><span>    shared_prefix_id: str <span style="color:#f92672">|</span> <span style="color:#66d9ef">None</span>
+</span></span><span style="display:flex;"><span>    phase: PhaseType           <span style="color:#75715e"># prefill/decode/reasoning/idle</span>
+</span></span><span style="display:flex;"><span>    hotness: float
+</span></span><span style="display:flex;"><span>    is_compressed: bool
+</span></span><span style="display:flex;"><span>    is_swapped: bool
+</span></span></code></pre></div><p>The most notable fields are <code>block_type</code> and <code>shared_prefix_id</code>.</p>
+<p>Real serving systems don&rsquo;t treat all KV-cache the same. A system prompt gets reused every turn and evicting it would be catastrophic. Reasoning tokens, on the other hand, have near-zero reuse once the thinking phase completes. Following the mental model from <a href="https://docs.nvidia.com/dynamo/dev/blog/agentic-inference">NVIDIA&rsquo;s Dynamo full-stack optimizations blog</a>, I categorize cache blocks by reuse likelihood:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>BLOCK_TYPE_EVICTION_VALUE <span style="color:#f92672">=</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;system&#34;</span>: <span style="color:#ae81ff">0.0</span>,      <span style="color:#75715e"># highest reuse, never evict</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;context&#34;</span>: <span style="color:#ae81ff">0.25</span>,    <span style="color:#75715e"># conversation history — high reuse</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;generation&#34;</span>: <span style="color:#ae81ff">0.5</span>,  <span style="color:#75715e"># active generation — moderate reuse</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;reasoning&#34;</span>: <span style="color:#ae81ff">0.9</span>,   <span style="color:#75715e"># thinking tokens — near-zero reuse after completion</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;ephemeral&#34;</span>: <span style="color:#ae81ff">1.0</span>,   <span style="color:#75715e"># subagent/temp — zero reuse, safe to evict</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre></div><p>In practice, many sequences in a batch share the same system prompt. vLLM&rsquo;s paged attention deduplicates this — prefix pages exist once in memory with multiple sequences referencing them. The implication is that evicting a sequence sharing a prefix with five others might free almost nothing, because the prefix pages are still pinned by the remaining references. This makes eviction decisions non-local in a way that simple per-sequence heuristics miss.</p>
+<p>Memory cost tracks paged allocation with quantization:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">memory_cost</span>(self, cache_capacity, page_size<span style="color:#f92672">=</span><span style="color:#ae81ff">128</span>):
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>is_swapped:
+</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">0.0</span>
+</span></span><span style="display:flex;"><span>    physical_tokens <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>allocated_pages(page_size) <span style="color:#f92672">*</span> page_size <span style="color:#f92672">*</span> self<span style="color:#f92672">.</span>quantization_multiplier()
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> physical_tokens <span style="color:#f92672">/</span> cache_capacity
+</span></span></code></pre></div><p>Each step, the simulator generates tokens for active sequences, tries to admit pending requests (fails them after 5 steps of waiting), spawns new arrivals, and naturally completes some sequences. The agent observes memory usage, cache entries ranked by cost, pre-scored eviction candidates, and queue pressure, then acts.</p>
+<h2 id="the-reward">The reward</h2>
+<p>For the environment and training stack I used <a href="https://www.primeintellect.ai/">Prime Intellect&rsquo;s</a> tooling, specifically <a href="https://github.com/PrimeIntellect-ai/verifiers">Verifiers</a>, their framework for building RL environments with tool use. The environment is a <code>StatefulToolEnv</code>: the model calls cache-management tools, the simulator advances one step, and the reward functions score the final episode. Most of the iteration was local eval work — run a few rollouts, inspect the reward breakdown, adjust the weights, and repeat.</p>
+<p>Getting the reward right took a few iterations. The core tension is: eviction frees memory and prevents failures, but it also kills throughput. Every reward component encodes one side of a tradeoff the policy needs to learn to balance.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(failure_penalty, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.40</span>)
+</span></span><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(throughput_reward, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.25</span>)
+</span></span><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(headroom_bonus, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.18</span>)
+</span></span><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(memory_efficiency, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.07</span>)
+</span></span><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(eviction_quality, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.05</span>)
+</span></span><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(latency_penalty, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.03</span>)
+</span></span><span style="display:flex;"><span>rubric<span style="color:#f92672">.</span>add_reward_func(risky_eviction_penalty, weight<span style="color:#f92672">=</span><span style="color:#ae81ff">0.02</span>)
+</span></span></code></pre></div><h3 id="failure-penalty-weight-040">Failure penalty (weight: 0.40)</h3>
+<p>In real serving, failures cascade. One rejected request creates backpressure that causes more. The penalty reflects this with an accelerating cost:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>penalty <span style="color:#f92672">=</span> min(failures <span style="color:#f92672">*</span> <span style="color:#ae81ff">0.15</span> <span style="color:#f92672">+</span> max(<span style="color:#ae81ff">0</span>, failures <span style="color:#f92672">-</span> <span style="color:#ae81ff">2</span>) <span style="color:#f92672">*</span> <span style="color:#ae81ff">0.1</span>, <span style="color:#ae81ff">1.0</span>)
+</span></span></code></pre></div><p>The first two failures cost 0.15 each. After that, each additional failure costs 0.25. This means 1 failure = -0.15, 3 = -0.55, 5 = -1.0 (cap). A flat per-failure penalty doesn&rsquo;t work here — it treats &ldquo;one unlucky timeout&rdquo; the same as &ldquo;the server is drowning,&rdquo; which gives the policy no reason to prevent cascades.</p>
+<h3 id="throughput-reward-weight-025">Throughput reward (weight: 0.25)</h3>
+<p>This is what keeps the policy from just evicting everything. It rewards total tokens generated across the episode, normalized against a realistic ceiling:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span>normalized <span style="color:#f92672">=</span> min(total_tokens_generated <span style="color:#f92672">/</span> <span style="color:#ae81ff">500.0</span>, <span style="color:#ae81ff">1.0</span>)
+</span></span></code></pre></div><p>The normalization constant matters a lot (more on this in the bugs section). The weight at 0.25 creates a direct tension with the failure penalty — the policy has to keep enough sequences alive to generate tokens while freeing enough memory to prevent failures.</p>
+<h3 id="headroom-bonus-weight-018">Headroom bonus (weight: 0.18)</h3>
+<p>This rewards proactive behavior. Instead of just checking the final state, it tracks memory usage at every step and scores each one:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> usage <span style="color:#f92672">in</span> memory_history:
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">if</span> usage <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0.8</span>:
+</span></span><span style="display:flex;"><span>        headroom_scores<span style="color:#f92672">.</span>append(<span style="color:#ae81ff">1.0</span>)     <span style="color:#75715e"># excellent</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">elif</span> usage <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0.95</span>:
+</span></span><span style="display:flex;"><span>        headroom_scores<span style="color:#f92672">.</span>append(<span style="color:#ae81ff">0.5</span>)     <span style="color:#75715e"># acceptable</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">elif</span> usage <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">1.0</span>:
+</span></span><span style="display:flex;"><span>        headroom_scores<span style="color:#f92672">.</span>append(<span style="color:#ae81ff">0.2</span>)     <span style="color:#75715e"># tight</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">else</span>:
+</span></span><span style="display:flex;"><span>        headroom_scores<span style="color:#f92672">.</span>append(<span style="color:#f92672">-</span><span style="color:#ae81ff">0.5</span>)    <span style="color:#75715e"># over budget</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">return</span> (sum(headroom_scores) <span style="color:#f92672">/</span> len(headroom_scores)) <span style="color:#f92672">*</span> <span style="color:#ae81ff">0.4</span>
+</span></span></code></pre></div><p>The key insight: rewarding only the final memory state teaches the policy to dump memory at the end. Rewarding the average across the episode teaches it to maintain headroom continuously, which is what prevents failures in the first place. A step at 0.8 usage scores 5x more than a step at 0.98.</p>
+<h3 id="eviction-quality-weight-005">Eviction quality (weight: 0.05)</h3>
+<p>Not all evictions are equal. Evicting an ephemeral block is nearly free; evicting a system prompt is catastrophic. This reward checks what&rsquo;s left in the cache at the end:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">for</span> entry <span style="color:#f92672">in</span> cache<span style="color:#f92672">.</span>values():
+</span></span><span style="display:flex;"><span>    remaining_value <span style="color:#f92672">+=</span> (<span style="color:#ae81ff">1.0</span> <span style="color:#f92672">-</span> entry<span style="color:#f92672">.</span>eviction_value) <span style="color:#f92672">*</span> entry<span style="color:#f92672">.</span>memory_cost(cache_capacity)
+</span></span><span style="display:flex;"><span>normalized <span style="color:#f92672">=</span> remaining_value <span style="color:#f92672">/</span> memory_usage
+</span></span></code></pre></div><p>Higher score means the policy kept high-value blocks (system, context) and evicted low-value ones (reasoning, ephemeral). It&rsquo;s weighted low because the block type signal should emerge naturally from the failure and throughput rewards — this just provides a small nudge toward better targeting.</p>
+<h3 id="risky-eviction-penalty-weight-002">Risky eviction penalty (weight: 0.02)</h3>
+<p>A targeted penalty for specifically bad eviction decisions. It tracks every eviction event and penalizes based on what was evicted:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">if</span> block_type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;system&#34;</span>:
+</span></span><span style="display:flex;"><span>    penalty <span style="color:#f92672">+=</span> <span style="color:#ae81ff">0.3</span>           <span style="color:#75715e"># evicting a system prompt is always wrong</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> block_type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;context&#34;</span> <span style="color:#f92672">and</span> priority <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0.5</span>:
+</span></span><span style="display:flex;"><span>    penalty <span style="color:#f92672">+=</span> <span style="color:#ae81ff">0.15</span>          <span style="color:#75715e"># high-priority context is expensive to lose</span>
+</span></span><span style="display:flex;"><span><span style="color:#66d9ef">if</span> block_type <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;generation&#34;</span> <span style="color:#f92672">and</span> priority <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0.7</span> <span style="color:#f92672">and</span> progress <span style="color:#f92672">&gt;=</span> <span style="color:#ae81ff">0.7</span>:
+</span></span><span style="display:flex;"><span>    penalty <span style="color:#f92672">+=</span> <span style="color:#ae81ff">0.2</span>           <span style="color:#75715e"># nearly-complete high-priority generation</span>
+</span></span></code></pre></div><p>This is intentionally low-weight. It&rsquo;s a guardrail, not a primary signal — the policy should learn to avoid these through the other rewards, but this catches cases where the eviction quality reward is too blunt.</p>
+<h3 id="latency-penalty-weight-003-and-memory-efficiency-weight-007">Latency penalty (weight: 0.03) and memory efficiency (weight: 0.07)</h3>
+<p>The latency penalty discourages excessive swap-to-CPU usage: <code>min(total_swap_latency * 0.2, 0.3)</code>. Swapping is a valid tool but has real costs — each CPU access adds 0.1-0.3 latency. Without this, the policy would just swap everything instead of making hard eviction decisions.</p>
+<p>Memory efficiency is a step function on the final memory state — 0.2 for ending below 85% usage, 0.1 for below 95%, 0.0 for below 100%, and -0.2 for overflow. It rewards the policy for ending the episode in a healthy state rather than just barely surviving.</p>
+<h3 id="why-these-weights">Why these weights</h3>
+<p>The weight distribution reflects a priority ordering: avoid failures first, maintain throughput second, manage memory proactively third, everything else is refinement. The top three components (failure, throughput, headroom) account for 83% of the reward. The remaining 17% shapes the policy toward better eviction targeting and discourages degenerate strategies like swap-everything.</p>
+<p>The weights also need to produce a learnable reward landscape. If failure penalty dominates too much, the policy converges to &ldquo;evict everything&rdquo; and throughput collapses. If throughput is too strong, it learns to hoard sequences and failures spike. The balance point is where the optimal policy has to actually reason about which sequences to keep vs. evict based on block type, priority, and pressure level.</p>
+<h2 id="results">Results</h2>
+<p>The reward design above is the result of iterating on an earlier version that had three environment bugs: the compress action was a no-op past the first call (hardcoded multiplier ignored int4), the system prompt enforced a single tool call per step (making it impossible to outpace memory growth), and the throughput normalization was 15x too high (killing the gradient signal). Fixing those changed the reward landscape entirely.</p>
+<p>Same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:</p>
+<table>
+  <thead>
+      <tr>
+          <th>metric</th>
+          <th>before</th>
+          <th>after</th>
+      </tr>
+  </thead>
+  <tbody>
+      <tr>
+          <td><strong>reward</strong></td>
+          <td>-0.090</td>
+          <td><strong>+0.043</strong></td>
+      </tr>
+      <tr>
+          <td>failures per episode</td>
+          <td>7.0</td>
+          <td><strong>1.0</strong></td>
+      </tr>
+      <tr>
+          <td>pressure steps</td>
+          <td>7.6</td>
+          <td><strong>1.2</strong></td>
+      </tr>
+      <tr>
+          <td>tool calls per turn</td>
+          <td>1.0</td>
+          <td><strong>2.9</strong></td>
+      </tr>
+      <tr>
+          <td>evict calls</td>
+          <td>6.8</td>
+          <td><strong>17.4</strong></td>
+      </tr>
+      <tr>
+          <td>compress calls</td>
+          <td>5.0</td>
+          <td><strong>14.4</strong></td>
+      </tr>
+      <tr>
+          <td>throughput reward</td>
+          <td>0.037</td>
+          <td><strong>0.139</strong></td>
+      </tr>
+      <tr>
+          <td>headroom bonus</td>
+          <td>0.081</td>
+          <td><strong>0.321</strong></td>
+      </tr>
+  </tbody>
+</table>
+<p>Failures dropped from 7 to 1. Memory pressure went from half the episode to near-zero. Compress usage nearly tripled now that it actually works. The model averages ~3 actions per turn, mixing eviction and compression based on pressure level.</p>
+<p>The full rollout breakdown from <code>prime eval run</code>:</p>
+<p><img src="/rollouts.png" alt="rollout metrics and reward distribution"></p>
+<p><img src="/evalsum.png" alt="evaluation summary"></p>
+<h2 id="takeaways">Takeaways</h2>
+<p>A few things that became much clearer through building the simulator than from reading about them:</p>
+<ul>
+<li><strong>Block types are central to good eviction policy</strong>. A system prompt and a reasoning trace occupy the same memory but have completely different reuse profiles. Treating them uniformly produces poor decisions.</li>
+<li><strong>Shared prefix deduplication creates non-local eviction effects</strong>. The memory freed by evicting a sequence depends on what else references the same prefix pages — papers mention this but it&rsquo;s easy to underestimate.</li>
+<li><strong>KV-cache compression deserves more attention</strong>. FP16→INT4 is a 4x memory reduction. The quality degradation is often acceptable, and it&rsquo;s strictly better than dropping the request. Compression should be the first response under moderate pressure, not eviction.</li>
+<li><strong>Action space constraints need to match the system dynamics</strong>. One action per scheduling cycle sounded elegant but made the control problem infeasible under sustained load. Real serving systems make multiple decisions per cycle for the same reason.</li>
+</ul>
+<p>The <a href="https://github.com/semioz">environment code is on GitHub</a> if you want to try it.</p>
+
+        </section>
+        <div class="post-tags">
+          
+          
+          
+        </div>
+      </div>
+
+      
+      
+    </div>
+
+    </article>
+</main>
+<footer>
+    <div style="display:flex"><a class="soc" href="https://github.com/semioz/" rel="me" title="GitHub"><svg class="feather">
+   <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#github" />
+</svg></a><a class="border"></a><a class="soc" href="https://www.linkedin.com/in/semioz/" rel="me" title="LinkedIn"><svg class="feather">
+   <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#linkedin" />
+</svg></a><a class="border"></a><a class="soc" href="https://x.com/semiozz" rel="me" title="X"><svg class="feather">
+   <use href="/svg/feather-sprite.51cf5647cb1987f769b616558f2620fd9423d72058490231b391bf6aa3744b55.svg#x" />
+</svg></a><a class="border"></a></div>
+    <div class="footer-info">
+        2026  - Semih Berkay Ozturk
+    </div>
+</footer>
+
+</div>
+    </body>
+</html>

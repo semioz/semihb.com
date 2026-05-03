@@ -1,31 +1,31 @@
 /* Markdown */
 
 :root {
-    --maincolor: #ff5a00;
-    --bordercl: #ff5a00;
-    --callouctcolor: #ff5a00;
-    --hovercolor: #ff5a00;
-    --darkMaincolor: #ff5a00;
-    --bg: #151617;
-    --bg-soft: #1b1c1d;
-    --bg-muted: #242526;
-    --fg: #ffffff;
-    --fg-strong: #ffffff;
-    --fg-muted: #c8c8c8;
-    --fg-inverse: #ffffff;
-    --border: #343536;
-    --selection-bg: #ff5a00;
-    --selection-fg: #ffffff;
-    --alert-color: #ff5a00;
-    --tip-color: #ff5a00;
-    --warning-color: #ff5a00;
+    --maincolor: #b57614;
+    --bordercl: #b57614;
+    --callouctcolor: #b57614;
+    --hovercolor: #b57614;
+    --darkMaincolor: #fabd2f;
+    --bg: #f9f5d7;
+    --bg-soft: #fbf1c7;
+    --bg-muted: #ebdbb2;
+    --fg: #3c3836;
+    --fg-strong: #282828;
+    --fg-muted: #7c6f64;
+    --fg-inverse: #f9f5d7;
+    --border: #d5c4a1;
+    --selection-bg: #d79921;
+    --selection-fg: #282828;
+    --alert-color: #9d0006;
+    --tip-color: #d79921;
+    --warning-color: #b57614;
 }
 
 html {
     background-color: var(--bg);
     color: var(--fg);
     font-family: 'Exo 2', sans-serif;
-    font-size: 18px;
+    font-size: 17px;
     line-height: 1.6em;
 }
 
@@ -176,13 +176,6 @@ header {
 
 header .main {
     font-size: 1.5rem;
-}
-
-header nav {
-    align-items: center;
-    column-gap: 0.6rem;
-    display: flex;
-    flex-wrap: wrap;
 }
 
 h1,
@@ -412,14 +405,14 @@ svg {
 .highlight pre code[class=language-javaScript]::before,
 .highlight pre code[class="language-js"]::before {
     content: "js";
-    background: var(--maincolor);
+    background: #b57614;
     color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-yml']::before,
 .highlight pre code[class*='language-yaml']::before {
     content: 'yaml';
-    background: var(--maincolor);
+    background: #9d0006;
     color: var(--fg-inverse);
 }
 
@@ -427,45 +420,45 @@ svg {
 .highlight pre code[class*='language-bash']::before,
 .highlight pre code[class*='language-sh']::before {
     content: 'shell';
-    background: var(--maincolor);
+    background: #b57614;
     color: var(--fg-inverse)
 }
 
 .highlight pre code[class*='language-json']::before {
     content: 'json';
-    background: var(--maincolor);
+    background: #076678;
     color: var(--fg-inverse)
 }
 
 .highlight pre code[class*='language-python']::before,
 .highlight pre code[class*='language-py']::before {
     content: 'py';
-    background: var(--maincolor);
+    background: #8f3f71;
     color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-css']::before {
     content: 'css';
-    background: var(--maincolor);
+    background: #d79921;
     color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-go']::before {
     content: 'Go';
-    background: var(--maincolor);
+    background: #076678;
     color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-md']::before,
 .highlight pre code[class*='language-md']::before {
     content: 'Markdown';
-    background: var(--maincolor);
+    background: #af3a03;
     color: var(--fg-inverse);
 }
 
 .highlight pre code[class*='language-ts']::before {
     content: 'TS';
-    background: var(--maincolor);
+    background: #076678;
     color: var(--fg-inverse);
 }
 
