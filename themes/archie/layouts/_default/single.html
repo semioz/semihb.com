@@ -7,6 +7,7 @@
         <div class="title">
           <h1 class="title">{{ .Title }}</h1>
           <div class="meta">Posted on {{ dateFormat ":date_medium" .Date }}{{ if .Draft }} <span class="draft-label">DRAFT</span> {{ end }}</div>
+          {{ partial "topic-links.html" . }}
         </div>
         {{ if isset .Params "tldr" }}
         <div class="tldr">

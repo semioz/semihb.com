@@ -19,11 +19,11 @@
   <meta name="twitter:description" content="How to speed up diffusion inference with minimal quality loss using first block caching">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&display=swap" rel="stylesheet">
 
 	
-	<link rel="stylesheet" type="text/css" media="screen" href="http://localhost:1313/css/main.d925c016a2b4f43f3ae2b97b131101363ba36499f5c601ca061c5588a16d369d.css" />
-		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="http://localhost:1313/css/dark.0fc4b67ea8225503fa206c608854e394cbf059a183a7ff401c5322cde4501913.css"   />
+	<link rel="stylesheet" type="text/css" media="screen" href="http://localhost:1313/css/main.44005ad04e9c676630eaf97bca77300c224f28ce238d0b931a1fe4b4b9ea5cf7.css" />
+		<link id="darkModeStyle" rel="stylesheet" type="text/css" href="http://localhost:1313/css/dark.60d2c01a7837f802cbbddc2bdb0569ce97ae20415db39579be7d9671185c3caf.css"   />
 </head>
 <body>
         <div class="content"><header>
@@ -50,6 +50,7 @@
         <div class="title">
           <h1 class="title">Speeding up diffusion models with first block caching</h1>
           <div class="meta">Posted on Aug 13, 2025</div>
+          <nav class="topic-hashtags" aria-label="Topics"><a class="topic-hashtag" href="/topics/diffusion/">#diffusion</a><a class="topic-hashtag" href="/topics/inference-engineering/">#inference-engineering</a><a class="topic-hashtag" href="/topics/caching/">#caching</a></nav>
         </div>
         
         <section class="body">
@@ -100,131 +101,131 @@ Computation Time Comparison:
 └─────────────────────────────────────────────────────┘
 </code></pre><h2 id="minimal-implementation-with-pytorch">Minimal implementation with PyTorch</h2>
 <p>First, we&rsquo;ll create a basic caching mechanism with pure PyTorch:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">import</span> torch
-</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> torch.nn <span style="color:#66d9ef">as</span> nn
-</span></span><span style="display:flex;"><span><span style="color:#f92672">from</span> typing <span style="color:#f92672">import</span> Optional, Dict, Any
+<div class="highlight"><pre tabindex="0" style="color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#fe8019">import</span> torch
+</span></span><span style="display:flex;"><span><span style="color:#fe8019">import</span> torch.nn <span style="color:#fe8019">as</span> nn
+</span></span><span style="display:flex;"><span><span style="color:#fe8019">from</span> typing <span style="color:#fe8019">import</span> Optional, Dict, Any
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">FirstBlockCache</span>:
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, threshold: float <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.12</span>):
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>threshold <span style="color:#f92672">=</span> threshold
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>previous_first_block_output: Optional[torch<span style="color:#f92672">.</span>Tensor] <span style="color:#f92672">=</span> <span style="color:#66d9ef">None</span>
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cached_final_output: Optional[torch<span style="color:#f92672">.</span>Tensor] <span style="color:#f92672">=</span> <span style="color:#66d9ef">None</span>
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache_hits <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>total_calls <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+</span></span><span style="display:flex;"><span><span style="color:#fe8019">class</span> FirstBlockCache:
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">__init__</span>(<span style="color:#fabd2f">self</span>, threshold: <span style="color:#fabd2f">float</span> <span style="color:#fe8019">=</span> <span style="color:#d3869b">0.12</span>):
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>threshold <span style="color:#fe8019">=</span> threshold
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>previous_first_block_output: Optional[torch<span style="color:#fe8019">.</span>Tensor] <span style="color:#fe8019">=</span> <span style="color:#fe8019">None</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cached_final_output: Optional[torch<span style="color:#fe8019">.</span>Tensor] <span style="color:#fe8019">=</span> <span style="color:#fe8019">None</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache_hits <span style="color:#fe8019">=</span> <span style="color:#d3869b">0</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>total_calls <span style="color:#fe8019">=</span> <span style="color:#d3869b">0</span>
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">should_skip_computation</span>(self, current_output: torch<span style="color:#f92672">.</span>Tensor) <span style="color:#f92672">-&gt;</span> bool:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;deciding if we should skip the rest of the forward pass.&#34;&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>previous_first_block_output <span style="color:#f92672">is</span> <span style="color:#66d9ef">None</span>:
-</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>previous_first_block_output <span style="color:#f92672">=</span> current_output<span style="color:#f92672">.</span>clone()
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">should_skip_computation</span>(<span style="color:#fabd2f">self</span>, current_output: torch<span style="color:#fe8019">.</span>Tensor) <span style="color:#fe8019">-&gt;</span> <span style="color:#fabd2f">bool</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#b8bb26">&#34;&#34;&#34;deciding if we should skip the rest of the forward pass.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">if</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>previous_first_block_output <span style="color:#fe8019">is</span> <span style="color:#fe8019">None</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>previous_first_block_output <span style="color:#fe8019">=</span> current_output<span style="color:#fe8019">.</span>clone()
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">return</span> <span style="color:#fe8019">False</span>
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># relative change between current and previous outputs</span>
-</span></span><span style="display:flex;"><span>        diff <span style="color:#f92672">=</span> torch<span style="color:#f92672">.</span>norm(current_output <span style="color:#f92672">-</span> self<span style="color:#f92672">.</span>previous_first_block_output)
-</span></span><span style="display:flex;"><span>        relative_diff <span style="color:#f92672">=</span> diff <span style="color:#f92672">/</span> (torch<span style="color:#f92672">.</span>norm(self<span style="color:#f92672">.</span>previous_first_block_output) <span style="color:#f92672">+</span> <span style="color:#ae81ff">1e-8</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#928374;font-style:italic"># relative change between current and previous outputs</span>
+</span></span><span style="display:flex;"><span>        diff <span style="color:#fe8019">=</span> torch<span style="color:#fe8019">.</span>norm(current_output <span style="color:#fe8019">-</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>previous_first_block_output)
+</span></span><span style="display:flex;"><span>        relative_diff <span style="color:#fe8019">=</span> diff <span style="color:#fe8019">/</span> (torch<span style="color:#fe8019">.</span>norm(<span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>previous_first_block_output) <span style="color:#fe8019">+</span> <span style="color:#d3869b">1e-8</span>)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>previous_first_block_output <span style="color:#f92672">=</span> current_output<span style="color:#f92672">.</span>clone()
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>previous_first_block_output <span style="color:#fe8019">=</span> current_output<span style="color:#fe8019">.</span>clone()
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> relative_diff <span style="color:#f92672">&lt;</span> self<span style="color:#f92672">.</span>threshold:
-</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache_hits <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">True</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">if</span> relative_diff <span style="color:#fe8019">&lt;</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>threshold:
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache_hits <span style="color:#fe8019">+=</span> <span style="color:#d3869b">1</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">return</span> <span style="color:#fe8019">True</span>
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">False</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">return</span> <span style="color:#fe8019">False</span>
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">update_cache</span>(self, output: torch<span style="color:#f92672">.</span>Tensor):
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cached_final_output <span style="color:#f92672">=</span> output<span style="color:#f92672">.</span>clone()
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">update_cache</span>(<span style="color:#fabd2f">self</span>, output: torch<span style="color:#fe8019">.</span>Tensor):
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cached_final_output <span style="color:#fe8019">=</span> output<span style="color:#fe8019">.</span>clone()
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_cached_output</span>(self) <span style="color:#f92672">-&gt;</span> torch<span style="color:#f92672">.</span>Tensor:
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>cached_final_output <span style="color:#f92672">is</span> <span style="color:#66d9ef">None</span>:
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">raise</span> <span style="color:#a6e22e">ValueError</span>(<span style="color:#e6db74">&#34;No cached output available&#34;</span>)
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>cached_final_output
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">get_cached_output</span>(<span style="color:#fabd2f">self</span>) <span style="color:#fe8019">-&gt;</span> torch<span style="color:#fe8019">.</span>Tensor:
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">if</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cached_final_output <span style="color:#fe8019">is</span> <span style="color:#fe8019">None</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">raise</span> <span style="color:#fb4934">ValueError</span>(<span style="color:#b8bb26">&#34;No cached output available&#34;</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">return</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cached_final_output
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">get_cache_stats</span>(self) <span style="color:#f92672">-&gt;</span> Dict[str, float]:
-</span></span><span style="display:flex;"><span>        hit_rate <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>cache_hits <span style="color:#f92672">/</span> max(self<span style="color:#f92672">.</span>total_calls, <span style="color:#ae81ff">1</span>)
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> {
-</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;cache_hits&#34;</span>: self<span style="color:#f92672">.</span>cache_hits,
-</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;total_calls&#34;</span>: self<span style="color:#f92672">.</span>total_calls,
-</span></span><span style="display:flex;"><span>            <span style="color:#e6db74">&#34;hit_rate&#34;</span>: hit_rate
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">get_cache_stats</span>(<span style="color:#fabd2f">self</span>) <span style="color:#fe8019">-&gt;</span> Dict[<span style="color:#fabd2f">str</span>, <span style="color:#fabd2f">float</span>]:
+</span></span><span style="display:flex;"><span>        hit_rate <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache_hits <span style="color:#fe8019">/</span> <span style="color:#fabd2f">max</span>(<span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>total_calls, <span style="color:#d3869b">1</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">return</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#b8bb26">&#34;cache_hits&#34;</span>: <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache_hits,
+</span></span><span style="display:flex;"><span>            <span style="color:#b8bb26">&#34;total_calls&#34;</span>: <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>total_calls,
+</span></span><span style="display:flex;"><span>            <span style="color:#b8bb26">&#34;hit_rate&#34;</span>: hit_rate
 </span></span><span style="display:flex;"><span>        }
 </span></span></code></pre></div><p>Integrating this into a simplified diffusion model structure:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#66d9ef">class</span> <span style="color:#a6e22e">OptimizedDiffusionBlock</span>(nn<span style="color:#f92672">.</span>Module):
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, model: nn<span style="color:#f92672">.</span>Module, cache_threshold: float <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.12</span>):
-</span></span><span style="display:flex;"><span>        super()<span style="color:#f92672">.</span><span style="color:#a6e22e">__init__</span>()
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>model <span style="color:#f92672">=</span> model
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache <span style="color:#f92672">=</span> FirstBlockCache(cache_threshold)
+<div class="highlight"><pre tabindex="0" style="color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#fe8019">class</span> OptimizedDiffusionBlock(nn<span style="color:#fe8019">.</span>Module):
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">__init__</span>(<span style="color:#fabd2f">self</span>, model: nn<span style="color:#fe8019">.</span>Module, cache_threshold: <span style="color:#fabd2f">float</span> <span style="color:#fe8019">=</span> <span style="color:#d3869b">0.12</span>):
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">super</span>()<span style="color:#fe8019">.</span><span style="color:#fabd2f">__init__</span>()
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>model <span style="color:#fe8019">=</span> model
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache <span style="color:#fe8019">=</span> FirstBlockCache(cache_threshold)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># we need to identify where the &#34;first block&#34; ends</span>
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>first_block_layers <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>_extract_first_block()
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>remaining_layers <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>_extract_remaining_layers()
+</span></span><span style="display:flex;"><span>        <span style="color:#928374;font-style:italic"># we need to identify where the &#34;first block&#34; ends</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>first_block_layers <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>_extract_first_block()
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>remaining_layers <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>_extract_remaining_layers()
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_extract_first_block</span>(self) <span style="color:#f92672">-&gt;</span> nn<span style="color:#f92672">.</span>Module:
-</span></span><span style="display:flex;"><span>        <span style="color:#e6db74">&#34;&#34;&#34;extracting the first block of layers from the model.&#34;&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>        layers <span style="color:#f92672">=</span> list(self<span style="color:#f92672">.</span>model<span style="color:#f92672">.</span>children())
-</span></span><span style="display:flex;"><span>        first_block_size <span style="color:#f92672">=</span> len(layers) <span style="color:#f92672">//</span> <span style="color:#ae81ff">4</span>  <span style="color:#75715e"># using first 25% as &#34;first block&#34;</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> nn<span style="color:#f92672">.</span>Sequential(<span style="color:#f92672">*</span>layers[:first_block_size])
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">_extract_first_block</span>(<span style="color:#fabd2f">self</span>) <span style="color:#fe8019">-&gt;</span> nn<span style="color:#fe8019">.</span>Module:
+</span></span><span style="display:flex;"><span>        <span style="color:#b8bb26">&#34;&#34;&#34;extracting the first block of layers from the model.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        layers <span style="color:#fe8019">=</span> <span style="color:#fabd2f">list</span>(<span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>model<span style="color:#fe8019">.</span>children())
+</span></span><span style="display:flex;"><span>        first_block_size <span style="color:#fe8019">=</span> <span style="color:#fabd2f">len</span>(layers) <span style="color:#fe8019">//</span> <span style="color:#d3869b">4</span>  <span style="color:#928374;font-style:italic"># using first 25% as &#34;first block&#34;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">return</span> nn<span style="color:#fe8019">.</span>Sequential(<span style="color:#fe8019">*</span>layers[:first_block_size])
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_extract_remaining_layers</span>(self) <span style="color:#f92672">-&gt;</span> nn<span style="color:#f92672">.</span>Module:
-</span></span><span style="display:flex;"><span>        layers <span style="color:#f92672">=</span> list(self<span style="color:#f92672">.</span>model<span style="color:#f92672">.</span>children())
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> len(layers) <span style="color:#f92672">==</span> <span style="color:#ae81ff">0</span>:
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> nn<span style="color:#f92672">.</span>Identity()
-</span></span><span style="display:flex;"><span>        first_block_size <span style="color:#f92672">=</span> len(layers) <span style="color:#f92672">//</span> <span style="color:#ae81ff">4</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> nn<span style="color:#f92672">.</span>Sequential(<span style="color:#f92672">*</span>layers[first_block_size:])
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">_extract_remaining_layers</span>(<span style="color:#fabd2f">self</span>) <span style="color:#fe8019">-&gt;</span> nn<span style="color:#fe8019">.</span>Module:
+</span></span><span style="display:flex;"><span>        layers <span style="color:#fe8019">=</span> <span style="color:#fabd2f">list</span>(<span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>model<span style="color:#fe8019">.</span>children())
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">if</span> <span style="color:#fabd2f">len</span>(layers) <span style="color:#fe8019">==</span> <span style="color:#d3869b">0</span>:
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">return</span> nn<span style="color:#fe8019">.</span>Identity()
+</span></span><span style="display:flex;"><span>        first_block_size <span style="color:#fe8019">=</span> <span style="color:#fabd2f">len</span>(layers) <span style="color:#fe8019">//</span> <span style="color:#d3869b">4</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">return</span> nn<span style="color:#fe8019">.</span>Sequential(<span style="color:#fe8019">*</span>layers[first_block_size:])
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, x: torch<span style="color:#f92672">.</span>Tensor) <span style="color:#f92672">-&gt;</span> torch<span style="color:#f92672">.</span>Tensor:
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>total_calls <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">def</span> <span style="color:#fabd2f">forward</span>(<span style="color:#fabd2f">self</span>, x: torch<span style="color:#fe8019">.</span>Tensor) <span style="color:#fe8019">-&gt;</span> torch<span style="color:#fe8019">.</span>Tensor:
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>total_calls <span style="color:#fe8019">+=</span> <span style="color:#d3869b">1</span>
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        first_block_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>first_block_layers(x)
+</span></span><span style="display:flex;"><span>        first_block_output <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>first_block_layers(x)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#75715e"># can we skip the rest??</span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>should_skip_computation(first_block_output):
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>get_cached_output()
+</span></span><span style="display:flex;"><span>        <span style="color:#928374;font-style:italic"># can we skip the rest??</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">if</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>should_skip_computation(first_block_output):
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">return</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>get_cached_output()
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        final_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>remaining_layers(first_block_output)
-</span></span><span style="display:flex;"><span>        self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>update_cache(final_output)
+</span></span><span style="display:flex;"><span>        final_output <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>remaining_layers(first_block_output)
+</span></span><span style="display:flex;"><span>        <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>update_cache(final_output)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">return</span> final_output
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">return</span> final_output
 </span></span></code></pre></div><p>For integration with libraries like Diffusers:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#f92672">from</span> diffusers <span style="color:#f92672">import</span> FluxPipeline
-</span></span><span style="display:flex;"><span><span style="color:#f92672">import</span> torch
+<div class="highlight"><pre tabindex="0" style="color:#ebdbb2;background-color:#282828;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-python" data-lang="python"><span style="display:flex;"><span><span style="color:#fe8019">from</span> diffusers <span style="color:#fe8019">import</span> FluxPipeline
+</span></span><span style="display:flex;"><span><span style="color:#fe8019">import</span> torch
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">apply_first_block_caching</span>(pipe: FluxPipeline, threshold: float <span style="color:#f92672">=</span> <span style="color:#ae81ff">0.12</span>):
-</span></span><span style="display:flex;"><span>    <span style="color:#e6db74">&#34;&#34;&#34;applying the first block caching to a Flux pipeline.&#34;&#34;&#34;</span>
-</span></span><span style="display:flex;"><span>    original_unet <span style="color:#f92672">=</span> pipe<span style="color:#f92672">.</span>transformer
+</span></span><span style="display:flex;"><span><span style="color:#fe8019">def</span> <span style="color:#fabd2f">apply_first_block_caching</span>(pipe: FluxPipeline, threshold: <span style="color:#fabd2f">float</span> <span style="color:#fe8019">=</span> <span style="color:#d3869b">0.12</span>):
+</span></span><span style="display:flex;"><span>    <span style="color:#b8bb26">&#34;&#34;&#34;applying the first block caching to a Flux pipeline.&#34;&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>    original_unet <span style="color:#fe8019">=</span> pipe<span style="color:#fe8019">.</span>transformer
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">class</span> <span style="color:#a6e22e">CachedTransformer</span>(nn<span style="color:#f92672">.</span>Module):
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">__init__</span>(self, original_model, cache_threshold):
-</span></span><span style="display:flex;"><span>            super()<span style="color:#f92672">.</span><span style="color:#a6e22e">__init__</span>()
-</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>original_model <span style="color:#f92672">=</span> original_model
-</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache <span style="color:#f92672">=</span> FirstBlockCache(cache_threshold)
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">class</span> CachedTransformer(nn<span style="color:#fe8019">.</span>Module):
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">def</span> <span style="color:#fabd2f">__init__</span>(<span style="color:#fabd2f">self</span>, original_model, cache_threshold):
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">super</span>()<span style="color:#fe8019">.</span><span style="color:#fabd2f">__init__</span>()
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>original_model <span style="color:#fe8019">=</span> original_model
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache <span style="color:#fe8019">=</span> FirstBlockCache(cache_threshold)
 </span></span><span style="display:flex;"><span>            
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">forward</span>(self, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>_cached_forward(<span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">def</span> <span style="color:#fabd2f">forward</span>(<span style="color:#fabd2f">self</span>, <span style="color:#fe8019">*</span>args, <span style="color:#fe8019">**</span>kwargs):
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">return</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>_cached_forward(<span style="color:#fe8019">*</span>args, <span style="color:#fe8019">**</span>kwargs)
 </span></span><span style="display:flex;"><span>        
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_cached_forward</span>(self, hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
-</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>total_calls <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">def</span> <span style="color:#fabd2f">_cached_forward</span>(<span style="color:#fabd2f">self</span>, hidden_states, <span style="color:#fe8019">*</span>args, <span style="color:#fe8019">**</span>kwargs):
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>total_calls <span style="color:#fe8019">+=</span> <span style="color:#d3869b">1</span>
 </span></span><span style="display:flex;"><span>            
-</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># for FLUX, we&#39;d need to identify the first transformer block</span>
-</span></span><span style="display:flex;"><span>            <span style="color:#75715e"># assuming we can get first block output somehow</span>
-</span></span><span style="display:flex;"><span>            first_block_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>_compute_first_block(hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
+</span></span><span style="display:flex;"><span>            <span style="color:#928374;font-style:italic"># for FLUX, we&#39;d need to identify the first transformer block</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#928374;font-style:italic"># assuming we can get first block output somehow</span>
+</span></span><span style="display:flex;"><span>            first_block_output <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>_compute_first_block(hidden_states, <span style="color:#fe8019">*</span>args, <span style="color:#fe8019">**</span>kwargs)
 </span></span><span style="display:flex;"><span>            
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">if</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>should_skip_computation(first_block_output):
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>get_cached_output()
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">if</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>should_skip_computation(first_block_output):
+</span></span><span style="display:flex;"><span>                <span style="color:#fe8019">return</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>get_cached_output()
 </span></span><span style="display:flex;"><span>            
-</span></span><span style="display:flex;"><span>            full_output <span style="color:#f92672">=</span> self<span style="color:#f92672">.</span>original_model(hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs)
-</span></span><span style="display:flex;"><span>            self<span style="color:#f92672">.</span>cache<span style="color:#f92672">.</span>update_cache(full_output)
+</span></span><span style="display:flex;"><span>            full_output <span style="color:#fe8019">=</span> <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>original_model(hidden_states, <span style="color:#fe8019">*</span>args, <span style="color:#fe8019">**</span>kwargs)
+</span></span><span style="display:flex;"><span>            <span style="color:#fabd2f">self</span><span style="color:#fe8019">.</span>cache<span style="color:#fe8019">.</span>update_cache(full_output)
 </span></span><span style="display:flex;"><span>            
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">return</span> full_output
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">return</span> full_output
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span>        <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">_compute_first_block</span>(self, hidden_states, <span style="color:#f92672">*</span>args, <span style="color:#f92672">**</span>kwargs):
-</span></span><span style="display:flex;"><span>            <span style="color:#66d9ef">with</span> torch<span style="color:#f92672">.</span>no_grad():
-</span></span><span style="display:flex;"><span>                <span style="color:#75715e"># run a subset of the transformer layers</span>
-</span></span><span style="display:flex;"><span>                <span style="color:#66d9ef">return</span> hidden_states
+</span></span><span style="display:flex;"><span>        <span style="color:#fe8019">def</span> <span style="color:#fabd2f">_compute_first_block</span>(<span style="color:#fabd2f">self</span>, hidden_states, <span style="color:#fe8019">*</span>args, <span style="color:#fe8019">**</span>kwargs):
+</span></span><span style="display:flex;"><span>            <span style="color:#fe8019">with</span> torch<span style="color:#fe8019">.</span>no_grad():
+</span></span><span style="display:flex;"><span>                <span style="color:#928374;font-style:italic"># run a subset of the transformer layers</span>
+</span></span><span style="display:flex;"><span>                <span style="color:#fe8019">return</span> hidden_states
 </span></span><span style="display:flex;"><span>    
-</span></span><span style="display:flex;"><span>    pipe<span style="color:#f92672">.</span>transformer <span style="color:#f92672">=</span> CachedTransformer(original_unet, threshold)
-</span></span><span style="display:flex;"><span>    <span style="color:#66d9ef">return</span> pipe
+</span></span><span style="display:flex;"><span>    pipe<span style="color:#fe8019">.</span>transformer <span style="color:#fe8019">=</span> CachedTransformer(original_unet, threshold)
+</span></span><span style="display:flex;"><span>    <span style="color:#fe8019">return</span> pipe
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#75715e"># example usage would be like:</span>
-</span></span><span style="display:flex;"><span>pipe <span style="color:#f92672">=</span> FluxPipeline<span style="color:#f92672">.</span>from_pretrained(<span style="color:#e6db74">&#34;black-forest-labs/FLUX.1-dev&#34;</span>)
-</span></span><span style="display:flex;"><span>pipe <span style="color:#f92672">=</span> apply_first_block_caching(pipe, residual_diff_threshold<span style="color:#f92672">=</span><span style="color:#ae81ff">0.12</span>)
+</span></span><span style="display:flex;"><span><span style="color:#928374;font-style:italic"># example usage would be like:</span>
+</span></span><span style="display:flex;"><span>pipe <span style="color:#fe8019">=</span> FluxPipeline<span style="color:#fe8019">.</span>from_pretrained(<span style="color:#b8bb26">&#34;black-forest-labs/FLUX.1-dev&#34;</span>)
+</span></span><span style="display:flex;"><span>pipe <span style="color:#fe8019">=</span> apply_first_block_caching(pipe, residual_diff_threshold<span style="color:#fe8019">=</span><span style="color:#d3869b">0.12</span>)
 </span></span></code></pre></div>
         </section>
         <div class="post-tags">

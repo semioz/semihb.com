@@ -3,10 +3,20 @@ baseURL = 'https://semihb.com/'
 languageCode = 'en-us'
 title = 'Semih Berkay Öztürk'
 theme = 'archie'
+
+[taxonomies]
+  tag = 'tags'
+  category = 'categories'
+  topic = 'topics'
+
 [params]
 	mode="dark"
 	useCDN=false
 	subtitle="Some cached thoughts on my explorations"
+
+[markup]
+  [markup.highlight]
+    style = 'gruvbox'
 
 [[menu.main]]
 name = "Home"

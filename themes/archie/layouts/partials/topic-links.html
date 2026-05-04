@@ -1,0 +1,8 @@
+{{- with .Params.topics -}}
+<nav class="topic-hashtags" aria-label="Topics">
+  {{- range . -}}
+  {{- $topic := . -}}
+  <a class="topic-hashtag" href="{{ printf "/topics/%s/" ($topic | urlize) | relLangURL }}">#{{ $topic | urlize }}</a>
+  {{- end -}}
+</nav>
+{{- end -}}

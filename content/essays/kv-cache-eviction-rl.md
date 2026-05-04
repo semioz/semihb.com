@@ -1,21 +1,25 @@
 ---
-title: "Teaching a model to manage KV-cache memory"
-date: 2026-04-26T00:00:00+00:00
+title: "Putting a model in charge of KV-cache memory"
+date: 2026-05-04T00:00:00+00:00
 description: "Building an RL environment to learn how KV-cache eviction works in LLM serving systems"
+topics:
+  - rl
+  - inference-engineering
+  - kv-cache
 ---
 
-I've been digging into how vLLM, SGLang, and NVIDIA's Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the design tradeoffs only really clicked once I tried to encode them into a simulator. So I built an RL environment around the core problem: when the inference server's memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before requests start failing.
+I've been digging into how vLLM, SGLang, and NVIDIA's Dynamo handle KV-cache under memory pressure. The papers describe the mechanics well enough, but the tradeoffs only really clicked once I tried to turn them into a small simulator. So I built an RL environment around the core problem: when the inference server's memory is filling up, requests are queueing, and it needs to decide what to evict, compress, or swap before things start falling behind.
 
 ## The setting
 
 Every time an LLM generates tokens, it stores key/value tensors from attention in the KV-cache. One sequence can eat hundreds of megabytes. Serve enough users concurrently and GPU memory fills up. At that point there are four options, all with tradeoffs:
 
-- **Evict** a sequence (frees the most memory, but that user gets an error)
-- **Compress** the cache via quantization (fp16→int8→int4, halves memory each step)
+- **Evict or preempt** a sequence (frees memory, but may mean recomputation, extra latency, or a failed request depending on the system)
+- **Compress** the cache via quantization (in this simulator, fp16→int8→int4, halving memory each step)
 - **Swap to CPU** (frees GPU memory but adds latency when the sequence is accessed again)
 - **Do nothing** (fine when there's room, dangerous when there isn't)
 
-Most serving frameworks handle this with hand-tuned heuristics. I wanted to see what happens if you let a model learn the policy instead.
+Most serving frameworks handle this with carefully tuned heuristics. I wanted a small sandbox where a model could make these tradeoffs explicitly, and where I could later train or evaluate policies without having to run a full serving stack.
 
 ## Building the simulator
 
@@ -53,7 +57,7 @@ BLOCK_TYPE_EVICTION_VALUE = {
 }
 ```
 
-In practice, many sequences in a batch share the same system prompt. vLLM's paged attention deduplicates this — prefix pages exist once in memory with multiple sequences referencing them. The implication is that evicting a sequence sharing a prefix with five others might free almost nothing, because the prefix pages are still pinned by the remaining references. This makes eviction decisions non-local in a way that simple per-sequence heuristics miss.
+In practice, many sequences in a batch share the same system prompt. vLLM's block-based cache manager and automatic prefix caching can reuse those prefix blocks instead of recomputing them, while SGLang gets a similar effect through RadixAttention. The implication is easy to miss: evicting a sequence that shares a prefix with five others might free almost nothing, because the shared prefix is still referenced elsewhere. This makes eviction decisions non-local in a way that simple per-sequence heuristics miss.
 
 Memory cost tracks paged allocation with quantization:
 
@@ -69,7 +73,7 @@ Each step, the simulator generates tokens for active sequences, tries to admit p
 
 ## The reward
 
-For the environment and training stack I used [Prime Intellect's](https://www.primeintellect.ai/) tooling, specifically [Verifiers](https://github.com/PrimeIntellect-ai/verifiers), their framework for building RL environments with tool use. The environment is a `StatefulToolEnv`: the model calls cache-management tools, the simulator advances one step, and the reward functions score the final episode. Most of the iteration was local eval work — run a few rollouts, inspect the reward breakdown, adjust the weights, and repeat.
+For the environment and eval stack I used [Prime Intellect's](https://www.primeintellect.ai/) tooling, specifically [Verifiers](https://github.com/PrimeIntellect-ai/verifiers), their framework for building RL environments with tool use. The environment is a `StatefulToolEnv`: the model calls cache-management tools, the simulator advances one step, and the reward functions score the final episode. Most of the iteration was local eval work — run a few rollouts, inspect the reward breakdown, adjust the weights, and repeat.
 
 Getting the reward right took a few iterations. The core tension is: eviction frees memory and prevents failures, but it also kills throughput. Every reward component encodes one side of a tradeoff the policy needs to learn to balance.
 
@@ -121,7 +125,7 @@ for usage in memory_history:
 return (sum(headroom_scores) / len(headroom_scores)) * 0.4
 ```
 
-The key insight: rewarding only the final memory state teaches the policy to dump memory at the end. Rewarding the average across the episode teaches it to maintain headroom continuously, which is what prevents failures in the first place. A step at 0.8 usage scores 5x more than a step at 0.98.
+The key insight: rewarding only the final memory state teaches the policy to dump memory at the end. Rewarding the average across the episode teaches it to maintain headroom continuously, which is what prevents failures in the first place. A step below 0.8 usage scores 5x more than a step at 0.98.
 
 ### Eviction quality (weight: 0.05)
 
@@ -160,13 +164,13 @@ Memory efficiency is a step function on the final memory state — 0.2 for endin
 
 The weight distribution reflects a priority ordering: avoid failures first, maintain throughput second, manage memory proactively third, everything else is refinement. The top three components (failure, throughput, headroom) account for 83% of the reward. The remaining 17% shapes the policy toward better eviction targeting and discourages degenerate strategies like swap-everything.
 
-The weights also need to produce a learnable reward landscape. If failure penalty dominates too much, the policy converges to "evict everything" and throughput collapses. If throughput is too strong, it learns to hoard sequences and failures spike. The balance point is where the optimal policy has to actually reason about which sequences to keep vs. evict based on block type, priority, and pressure level.
+The weights also need to produce a learnable reward landscape. If failure penalty dominates too much, a trained policy would drift toward "evict everything" and throughput would collapse. If throughput is too strong, it would learn to hoard sequences and failures would spike. The balance point is where the policy has to actually reason about which sequences to keep vs. evict based on block type, priority, and pressure level.
 
 ## Results
 
 The reward design above is the result of iterating on an earlier version that had three environment bugs: the compress action was a no-op past the first call (hardcoded multiplier ignored int4), the system prompt enforced a single tool call per step (making it impossible to outpace memory growth), and the throughput normalization was 15x too high (killing the gradient signal). Fixing those changed the reward landscape entirely.
 
-Same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:
+Same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes. This is not a trained RL policy yet; I used zero-shot rollouts first because they are a fast way to see whether the environment is giving the model a usable control problem:
 
 | metric | before | after |
 |---|---|---|
@@ -179,7 +183,7 @@ Same model (gpt-5.4-mini, zero-shot), same eval, before and after the fixes:
 | throughput reward | 0.037 | **0.139** |
 | headroom bonus | 0.081 | **0.321** |
 
-Failures dropped from 7 to 1. Memory pressure went from half the episode to near-zero. Compress usage nearly tripled now that it actually works. The model averages ~3 actions per turn, mixing eviction and compression based on pressure level.
+Failures dropped from 7 to 1. Memory pressure went from half the episode to near-zero. Compress usage nearly tripled once it actually had an effect. The model averaged ~3 actions per turn, mixing eviction and compression based on pressure level instead of hammering one tool repeatedly.
 
 The full rollout breakdown from `prime eval run`:
 
@@ -193,7 +197,7 @@ A few things that became much clearer through building the simulator than from r
 
 - **Block types are central to good eviction policy**. A system prompt and a reasoning trace occupy the same memory but have completely different reuse profiles. Treating them uniformly produces poor decisions.
 - **Shared prefix deduplication creates non-local eviction effects**. The memory freed by evicting a sequence depends on what else references the same prefix pages — papers mention this but it's easy to underestimate.
-- **KV-cache compression deserves more attention**. FP16→INT4 is a 4x memory reduction. The quality degradation is often acceptable, and it's strictly better than dropping the request. Compression should be the first response under moderate pressure, not eviction.
+- **KV-cache compression deserves more attention**. In the simulator, FP16→INT4 is a 4x memory reduction. In a real system the answer depends on kernel support, calibration, and quality tolerance, but under moderate pressure compression can be a better first move than dropping or recomputing the request.
 - **Action space constraints need to match the system dynamics**. One action per scheduling cycle sounded elegant but made the control problem infeasible under sustained load. Real serving systems make multiple decisions per cycle for the same reason.
 
-The [environment code is on GitHub](https://github.com/semioz) if you want to try it.
+The [environment code is on GitHub](https://github.com/semioz/kv-cache-rl) if you want to try it.

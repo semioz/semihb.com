@@ -2,6 +2,10 @@
 title: "Speeding up diffusion models with first block caching"
 date: 2025-08-13T02:01:58+05:30
 description: "How to speed up diffusion inference with minimal quality loss using first block caching"
+topics:
+  - diffusion
+  - inference-engineering
+  - caching
 ---
 
 Inference speed and quality is all you need from a diffusion model and one of the simplest but very effective optimization techniques is something called **"first block caching"** that can significantly speed up inference with minimal quality loss.

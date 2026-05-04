@@ -1,6 +1,10 @@
 {{ define "main" }}
 {{ if isset .Data "Term" }}
+{{ if eq .Data.Plural "topics" }}
+<h1>Entries for #{{ .Data.Term }}</h1>
+{{ else }}
 <h1>Entries tagged - "{{ .Data.Term }}"</h1>
+{{ end }}
 {{ else }}
 <h1 class="page-title">All articles</h1>
 {{ end }}
@@ -10,6 +14,7 @@
 		{{- if (not (in (.Site.Params.excludedTypes | default (slice "page")) .Type)) -}}
 		<li class="post">
 			<a href="{{ .RelPermalink }}">{{.Title}}</a> <span class="meta">{{ dateFormat ":date_medium" .Date }}{{ if .Draft }} <span class="draft-label">DRAFT</span> {{ end }}</span>
+			{{ partial "topic-links.html" . }}
 		</li>
 		{{- end -}}
 	{{- end -}}
